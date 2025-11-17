@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+sqlmodel
+psycopg[binary]  # For PostgreSQL
+alembic          # For database migrations
+pydantic-settings
+python-dotenv
+python-jose[cryptography] # For JWTs
+passlib[bcrypt]         # For password hashing
+twilio           # For OTP
+googlemaps       # For Geocoding/Distance Matrix
+razorpay         # For Payments
+pytest
+pytest-asyncio
+httpx            # For testing

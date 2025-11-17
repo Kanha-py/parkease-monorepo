@@ -1,0 +1,22 @@
+{
+  "name": "parkease-monorepo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:api": "cd apps/api && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile start",
+    "dev": "turbo run dev:* --parallel",
+    "test:api": "cd apps/api && source venv/bin/activate && pytest",
+    "test:web": "pnpm --filter web test",
+    "test": "turbo run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.22.0",
+  "devDependencies": {
+    "turbo": "^2.6.1"
+  }
+}

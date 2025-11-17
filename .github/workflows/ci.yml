@@ -1,0 +1,63 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: parkease
+          POSTGRES_PASSWORD: parkease
+          POSTGRES_DB: parkease_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv apps/api/venv
+          source apps/api/venv/bin/activate
+          pip install -r apps/api/requirements.txt
+
+      - name: Run all tests
+        env:
+          DATABASE_URL: postgresql://parkease:parkease@localhost:5432/parkease_db
+          # We must provide dummy keys for the CI test
+          TWILIO_ACCOUNT_SID: "dummy"
+          TWILIO_AUTH_TOKEN: "dummy"
+          GOOGLE_MAPS_API_KEY: "dummy"
+          RAZORPAY_KEY_ID: "dummy"
+        run: pnpm test

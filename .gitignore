@@ -1,0 +1,23 @@
+# Environments
+.env
+.env.local
+apps/api/.env
+apps/web/.env.local
+
+# Node
+node_modules
+.next/
+out/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+apps/api/venv/
+
+# Docker
+postgres_data/
+
+# IDE
+.vscode/
+.idea/

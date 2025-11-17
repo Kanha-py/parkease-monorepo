@@ -1,0 +1,15 @@
+
+
+> api@1.0.0 test /home/K4nh4/projects/parkease-monorepo/apps/api
+> source .venv/bin/activate && pytest
+
+]9;4;3;\[1m============================ test session starts ============================[0m
+platform linux -- Python 3.13.9, pytest-9.0.1, pluggy-1.6.0
+rootdir: /home/K4nh4/projects/parkease-monorepo/apps/api
+plugins: anyio-4.11.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+[1mcollecting ... [0m[1mcollected 2 items                                                           [0m
+
+test_main.py ]9;4;1;0\[32m.[0m]9;4;1;50\[32m.[0m[32m                                                       [100%][0m]9;4;0;\
+
+[32m============================= [32m[1m2 passed[0m[32m in 0.16s[0m[32m =============================[0m
