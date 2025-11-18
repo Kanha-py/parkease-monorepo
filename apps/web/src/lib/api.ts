@@ -20,3 +20,29 @@ api.interceptors.request.use((config) => {
 });
 
 export default api;
+
+// --- Interfaces ---
+export interface Lot {
+  id: string;
+  name: string;
+  address: string;
+  created_at: string;
+}
+
+export interface CreateLotData {
+  name: string;
+  address: string;
+  spot_type: "CAR" | "TWO_WHEELER";
+  amenities: string[];
+}
+
+// --- API Calls ---
+export const createLot = async (data: CreateLotData) => {
+  const response = await api.post<Lot>("/lots/", data);
+  return response.data;
+};
+
+export const getMyLots = async () => {
+  const response = await api.get<Lot[]>("/lots/my-lots");
+  return response.data;
+};

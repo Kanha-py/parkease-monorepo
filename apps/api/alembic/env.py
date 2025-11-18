@@ -4,6 +4,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlmodel import SQLModel
+from app.models import User, PayoutAccount, ParkingLot, ParkingSpot, Amenity, LotAmenity
+import geoalchemy2
 from alembic import context
 
 # IMPORT YOUR MODELS HERE SO ALEMBIC SEES THEM

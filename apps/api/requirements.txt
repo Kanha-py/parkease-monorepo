@@ -17,6 +17,7 @@ cryptography==46.0.3
 ecdsa==0.19.1
 fastapi==0.121.2
 frozenlist==1.8.0
+GeoAlchemy2==0.18.0
 googlemaps==4.10.0
 greenlet==3.2.4
 h11==0.16.0
