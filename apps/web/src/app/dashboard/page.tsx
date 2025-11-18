@@ -66,7 +66,13 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {lots.map((lot) => (
-            <Card key={lot.id}>
+            <Card
+              key={lot.id}
+              // --- ADDED: Styling to look clickable ---
+              className="cursor-pointer hover:border-primary transition-colors"
+              // --- ADDED: Navigation logic ---
+              onClick={() => router.push(`/dashboard/${lot.id}`)}
+            >
               <CardHeader>
                 <CardTitle>{lot.name}</CardTitle>
               </CardHeader>

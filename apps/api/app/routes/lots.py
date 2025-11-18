@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from geoalchemy2.elements import WKTElement
+from app.schemas import LotReadWithSpots, SpotRead
 
 from app.db import get_session
 from app.models import User, ParkingLot, ParkingSpot
@@ -59,3 +61,22 @@ async def get_my_lots(
     statement = select(ParkingLot).where(ParkingLot.owner_user_id == current_user.id)
     result = await session.execute(statement)
     return result.scalars().all()
+
+
+@router.get("/{lot_id}", response_model=LotReadWithSpots)
+async def get_lot_details(
+    lot_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+):
+    lot = await session.get(ParkingLot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot not found")
+
+    # Fetch spots manually since we aren't using Relationship attributes yet
+    statement = select(ParkingSpot).where(ParkingSpot.lot_id == lot_id)
+    result = await session.execute(statement)
+    spots = result.scalars().all()
+
+    # Combine into response
+    return LotReadWithSpots(
+        **lot.model_dump(), spots=[SpotRead(**s.model_dump()) for s in spots]
+    )

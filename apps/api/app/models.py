@@ -3,7 +3,7 @@ from typing import Optional, List, Any
 from datetime import datetime
 from geoalchemy2 import Geography
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, text, JSON
+from sqlalchemy import Column, text, JSON, BigInteger
 import uuid
 
 
@@ -62,3 +62,29 @@ class ParkingSpot(SQLModel, table=True):
     lot_id: uuid.UUID = Field(foreign_key="parkinglot.id")
     name: str = Field(max_length=50)
     spot_type: str = Field(max_length=20)
+
+
+class SpotAvailability(SQLModel, table=True):
+    # Use BigInteger for ID as this table grows very fast
+    id: Optional[int] = Field(
+        default=None, sa_column=Column(BigInteger, primary_key=True, autoincrement=True)
+    )
+    spot_id: uuid.UUID = Field(foreign_key="parkingspot.id", index=True)
+
+    start_time: datetime = Field(index=True)
+    end_time: datetime = Field(index=True)
+
+    status: str = Field(default="AVAILABLE", max_length=20)  # 'AVAILABLE', 'BOOKED'
+    booking_id: Optional[uuid.UUID] = Field(default=None)  # Link to Booking later
+
+
+class PricingRule(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    lot_id: uuid.UUID = Field(foreign_key="parkinglot.id", index=True)
+
+    name: str = Field(max_length=50)  # e.g. "Standard Hourly"
+    rate: float = Field(default=0.0)
+    rate_type: str = Field(default="HOURLY", max_length=20)  # 'HOURLY', 'FLAT'
+
+    is_active: bool = Field(default=True)
+    priority: int = Field(default=0)  # 0=Base, 10=Event (Higher overrides lower)

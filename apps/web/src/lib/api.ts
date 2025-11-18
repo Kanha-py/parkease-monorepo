@@ -46,3 +46,37 @@ export const getMyLots = async () => {
   const response = await api.get<Lot[]>("/lots/my-lots");
   return response.data;
 };
+
+export interface Spot {
+  id: string;
+  name: string;
+  spot_type: string;
+}
+
+export interface LotDetails extends Lot {
+  spots: Spot[];
+}
+
+// --- New API Calls ---
+export const getLotDetails = async (lotId: string) => {
+  const response = await api.get<LotDetails>(`/lots/${lotId}`);
+  return response.data;
+};
+
+export const setSpotPricing = async (lotId: string, rate: number) => {
+  const response = await api.post("/my-spot/pricing", {
+    lot_id: lotId,
+    rate: rate,
+    rate_type: "HOURLY"
+  });
+  return response.data;
+};
+
+export const setSpotAvailability = async (spotId: string, start: Date, end: Date) => {
+  const response = await api.post("/my-spot/availability", {
+    spot_id: spotId,
+    start_time: start.toISOString(),
+    end_time: end.toISOString()
+  });
+  return response.data;
+};

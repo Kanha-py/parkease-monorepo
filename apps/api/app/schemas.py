@@ -49,3 +49,39 @@ class LotRead(BaseModel):
     name: str
     address: str
     created_at: datetime
+
+
+class AvailabilityCreate(BaseModel):
+    spot_id: uuid.UUID
+    start_time: datetime
+    end_time: datetime
+
+
+class PricingCreate(BaseModel):
+    lot_id: uuid.UUID
+    rate: float
+    rate_type: str = "HOURLY"
+
+
+# Response models
+class AvailabilityRead(BaseModel):
+    id: int
+    start_time: datetime
+    end_time: datetime
+    status: str
+
+
+class PricingRead(BaseModel):
+    id: uuid.UUID
+    rate: float
+    rate_type: str
+
+
+class SpotRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    spot_type: str
+
+
+class LotReadWithSpots(LotRead):
+    spots: List[SpotRead]
