@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-
+from pytz import timezone
 from app.db import get_session
 from app.models import User, SpotAvailability, PricingRule, ParkingSpot, ParkingLot
 from app.schemas import AvailabilityCreate, AvailabilityRead, PricingCreate, PricingRead
@@ -31,13 +31,16 @@ async def set_availability(
         raise HTTPException(
             status_code=404, detail="Spot not found or you don't own it."
         )
+    ist = timezone("Asia/Kolkata")
+    start_ist = payload.start_time.astimezone(ist)
+    end_ist = payload.end_time.astimezone(ist)
 
     # 2. Create Availability
     # In a real app, we would check for overlapping time slots here!
     new_avail = SpotAvailability(
         spot_id=payload.spot_id,
-        start_time=payload.start_time.replace(tzinfo=None),
-        end_time=payload.end_time.replace(tzinfo=None),
+        start_time=start_ist.replace(tzinfo=None),
+        end_time=end_ist.replace(tzinfo=None),
         status="AVAILABLE",
     )
 

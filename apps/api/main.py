@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from app.config import settings
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, lots, seller
+from app.routes import auth, lots, seller, search
 
 load_dotenv()  # Load .env file
 
@@ -42,3 +42,4 @@ def check_keys():
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(lots.router, prefix="/lots", tags=["Lots"])
 app.include_router(seller.router, prefix="/my-spot", tags=["Seller"])
+app.include_router(search.router, prefix="/api/search", tags=["Search"])

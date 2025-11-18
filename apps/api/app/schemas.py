@@ -85,3 +85,18 @@ class SpotRead(BaseModel):
 
 class LotReadWithSpots(LotRead):
     spots: List[SpotRead]
+
+
+# --- Search Schemas ---
+class SearchResult(BaseModel):
+    lot_id: uuid.UUID
+    name: str
+    address: str
+    # We return lat/lon as simple floats for the frontend map
+    latitude: float
+    longitude: float
+    price: float  # The calculated total price
+    rate_type: str
+
+    class Config:
+        from_attributes = True

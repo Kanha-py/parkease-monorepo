@@ -1,16 +1,16 @@
-import axios from "axios";
-import { useAuthStore } from "../store/useAuthStore";
+import axios from 'axios';
+import { useAuthStore } from '../store/useAuthStore';
 
-const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 });
 
-// Add a request interceptor to attach the token
+// --- Request Interceptor: Attach Token ---
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) {
@@ -19,33 +19,26 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export default api;
+// --- Response Interceptor: Handle 401 (Auto-Logout) ---
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Token is invalid or expired -> Logout user
+      useAuthStore.getState().logout();
+    }
+    return Promise.reject(error);
+  }
+);
 
 // --- Interfaces ---
+
 export interface Lot {
   id: string;
   name: string;
   address: string;
   created_at: string;
 }
-
-export interface CreateLotData {
-  name: string;
-  address: string;
-  spot_type: "CAR" | "TWO_WHEELER";
-  amenities: string[];
-}
-
-// --- API Calls ---
-export const createLot = async (data: CreateLotData) => {
-  const response = await api.post<Lot>("/lots/", data);
-  return response.data;
-};
-
-export const getMyLots = async () => {
-  const response = await api.get<Lot[]>("/lots/my-lots");
-  return response.data;
-};
 
 export interface Spot {
   id: string;
@@ -57,7 +50,57 @@ export interface LotDetails extends Lot {
   spots: Spot[];
 }
 
-// --- New API Calls ---
+export interface CreateLotData {
+  name: string;
+  address: string;
+  spot_type: "CAR" | "TWO_WHEELER";
+  amenities: string[];
+}
+
+export interface SearchResult {
+  lot_id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  price: number;
+  rate_type: string;
+}
+
+export interface SearchParams {
+  lat: number;
+  long: number;
+  start_time: string;
+  end_time: string;
+  radius_meters?: number;
+}
+
+export interface BookingRequest {
+  lot_id: string;
+  start_time: string;
+  end_time: string;
+}
+
+export interface BookingResult {
+  booking_id: string;
+  razorpay_order_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
+// --- API Calls ---
+
+export const createLot = async (data: CreateLotData) => {
+  const response = await api.post<Lot>("/lots/", data);
+  return response.data;
+};
+
+export const getMyLots = async () => {
+  const response = await api.get<Lot[]>("/lots/my-lots");
+  return response.data;
+};
+
 export const getLotDetails = async (lotId: string) => {
   const response = await api.get<LotDetails>(`/lots/${lotId}`);
   return response.data;
@@ -80,3 +123,17 @@ export const setSpotAvailability = async (spotId: string, start: Date, end: Date
   });
   return response.data;
 };
+
+export const searchParking = async (params: SearchParams) => {
+  const response = await api.get<SearchResult[]>("/api/search/availability", {
+    params: params
+  });
+  return response.data;
+};
+
+export const createBooking = async (data: BookingRequest) => {
+  const response = await api.post<BookingResult>("/api/book/", data);
+  return response.data;
+};
+
+export default api;
