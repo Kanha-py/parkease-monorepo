@@ -42,6 +42,9 @@ class LotCreate(BaseModel):
     address: str
     spot_type: str = "CAR"
     amenities: List[str] = []
+    # New fields (Optional overrides)
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class LotRead(BaseModel):

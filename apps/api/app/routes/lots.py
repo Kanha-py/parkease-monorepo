@@ -20,11 +20,15 @@ async def create_lot(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    # 1. Geocode
-    lat, lon = get_lat_lon(payload.address)
+    # 1. Determine Lat/Lon
+    if payload.latitude and payload.longitude:
+        # Trust the user's pinned location
+        lat, lon = payload.latitude, payload.longitude
+    else:
+        # Fallback to Geocoding the string
+        lat, lon = get_lat_lon(payload.address)
 
-    # 2. Create Lot
-    # PostGIS Point is (longitude, latitude)
+    # 2. Create PostGIS Point (Longitude, Latitude)
     location_point = WKTElement(f"POINT({lon} {lat})", srid=4326)
 
     new_lot = ParkingLot(
@@ -33,17 +37,16 @@ async def create_lot(
         address=payload.address,
         location=location_point,
     )
+    # ... (Rest of the function remains the same: add spot, update role, commit)
     session.add(new_lot)
     await session.commit()
     await session.refresh(new_lot)
 
-    # 3. Create Spot
     new_spot = ParkingSpot(
         lot_id=new_lot.id, name=f"{payload.name} - Spot 1", spot_type=payload.spot_type
     )
     session.add(new_spot)
 
-    # 4. Upgrade Role
     if current_user.role == "DRIVER":
         current_user.role = "SELLER_C2B"
         session.add(current_user)

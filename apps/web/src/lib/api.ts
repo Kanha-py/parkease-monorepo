@@ -118,6 +118,8 @@ export interface CreateLotData {
   address: string;
   spot_type: "CAR" | "TWO_WHEELER";
   amenities: string[];
+  latitude?: number; // <--- Add this
+  longitude?: number; // <--- Add this
 }
 
 export interface SearchResult {

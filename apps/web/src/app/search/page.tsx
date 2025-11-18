@@ -5,17 +5,29 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { GoogleMap, MarkerF, useLoadScript } from "@react-google-maps/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import { searchParking, createBooking, SearchResult } from "@/lib/api";
-import { loadRazorpayScript } from "@/lib/razorpay"; // <--- Import new utility
+import { loadRazorpayScript } from "@/lib/razorpay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const mapContainerStyle = {
-  width: "100%",
-  height: "100vh",
-};
-
+const mapContainerStyle = { width: "100%", height: "100vh" };
 const libraries: ("places")[] = ["places"];
+
+// Custom Icons (URLs)
+const USER_ICON = "http://maps.google.com/mapfiles/ms/icons/blue-dot.png";
+const SPOT_ICON = "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+
+// Helper: Calculate Distance (Haversine Formula)
+function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return (R * c).toFixed(1);
+}
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -39,8 +51,7 @@ function SearchContent() {
     const fetchResults = async () => {
       try {
         const data = await searchParking({
-          lat,
-          long,
+          lat, long,
           start_time: searchParams.get("start") || "",
           end_time: searchParams.get("end") || "",
           radius_meters: 20000,
@@ -48,7 +59,6 @@ function SearchContent() {
         setResults(data);
       } catch (error) {
         console.error(error);
-        toast.error("Search failed.");
       } finally {
         setLoading(false);
       }
@@ -63,25 +73,17 @@ function SearchContent() {
       toast.error("Please log in to book a spot.");
       return;
     }
-
     setBookingLoading(lotId);
     try {
-      // 1. Load Razorpay SDK
       const isLoaded = await loadRazorpayScript();
-      if (!isLoaded) {
-        toast.error("Razorpay SDK failed to load. Check your connection.");
-        setBookingLoading(null);
-        return;
-      }
+      if (!isLoaded) { toast.error("SDK Error"); return; }
 
-      // 2. Create Order on Backend
       const order = await createBooking({
         lot_id: lotId,
         start_time: searchParams.get("start") || "",
         end_time: searchParams.get("end") || "",
       });
 
-      // 3. Open Native Razorpay Modal
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_dummy",
         amount: order.amount * 100,
@@ -91,29 +93,16 @@ function SearchContent() {
         order_id: order.razorpay_order_id,
         handler: function (response: any) {
           toast.success("Payment Successful!");
-          console.log("Payment ID:", response.razorpay_payment_id);
-          // Redirect to Dashboard or Success Page
           router.push("/dashboard");
         },
-        prefill: {
-          name: user.name,
-          contact: user.phone,
-        },
-        theme: {
-          color: "#0F172A",
-        },
+        prefill: { name: user.name, contact: user.phone },
+        theme: { color: "#0F172A" },
       };
 
-      // Access the window object directly
       const rzp1 = new (window as any).Razorpay(options);
-      rzp1.on("payment.failed", function (response: any) {
-        toast.error("Payment Failed: " + response.error.description);
-      });
       rzp1.open();
-
     } catch (error) {
-      console.error(error);
-      toast.error("Booking failed. Spot might be taken.");
+      toast.error("Booking failed.");
     } finally {
       setBookingLoading(null);
     }
@@ -140,7 +129,11 @@ function SearchContent() {
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">{lot.address}</p>
+                <p className="text-sm text-muted-foreground mb-1">{lot.address}</p>
+                {/* Distance Badge */}
+                <div className="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-xs font-medium text-blue-700 mb-3">
+                   📍 {getDistanceKm(lat, long, lot.latitude, lot.longitude)} km away
+                </div>
                 <Button
                   className="w-full size-sm"
                   onClick={() => handleBook(lot.lot_id, lot.price)}
@@ -151,11 +144,8 @@ function SearchContent() {
               </CardContent>
             </Card>
           ))}
-
           {!loading && results.length === 0 && (
-            <div className="text-center p-8 text-gray-500">
-              No spots found near this location for your selected time.
-            </div>
+             <div className="text-center p-8 text-gray-500">No spots found.</div>
           )}
         </div>
       </div>
@@ -166,15 +156,24 @@ function SearchContent() {
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
             center={center}
-            zoom={14}
+            zoom={13}
             options={{ disableDefaultUI: true, zoomControl: true }}
           >
-            <MarkerF position={center} title="You are here" />
+            <MarkerF position={center} icon={USER_ICON} title="You are here" />
+
             {results.map((lot) => (
               <MarkerF
                 key={lot.lot_id}
                 position={{ lat: lot.latitude, lng: lot.longitude }}
-                title={`₹${lot.price}`}
+                icon={SPOT_ICON}
+                title={`${lot.name} - ₹${lot.price}`}
+                label={{
+                  text: `₹${lot.price}`,
+                  color: "white",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  className: "bg-black px-1 rounded"
+                }}
               />
             ))}
           </GoogleMap>
@@ -188,7 +187,7 @@ function SearchContent() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="p-10 text-center">Loading Search...</div>}>
+    <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
       <SearchContent />
     </Suspense>
   );
