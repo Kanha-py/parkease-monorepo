@@ -34,6 +34,40 @@ api.interceptors.response.use(
 // --- Interfaces ---
 
 // --- Redemption Interfaces ---
+// --- B2B Interfaces ---
+export interface PricingRule {
+  id: string;
+  lot_id: string;
+  name: string;
+  rate: number;
+  rate_type: string;
+  priority: number;
+  is_active: boolean;
+}
+
+// --- B2B API Calls ---
+export const getPricingRules = async (lotId: string) => {
+  const response = await api.get<PricingRule[]>(`/api/b2b/lots/${lotId}/rules`);
+  return response.data;
+};
+
+export const createPricingRule = async (
+  lotId: string,
+  data: { name: string; rate: number; priority: number }
+) => {
+  const response = await api.post<PricingRule>(`/api/b2b/lots/${lotId}/rules`, {
+    lot_id: lotId,
+    ...data,
+    rate_type: "HOURLY",
+  });
+  return response.data;
+};
+
+export const deletePricingRule = async (ruleId: string) => {
+  const response = await api.delete(`/api/b2b/rules/${ruleId}`);
+  return response.data;
+};
+
 export interface BookingItem {
   id: string;
   lot_name: string;

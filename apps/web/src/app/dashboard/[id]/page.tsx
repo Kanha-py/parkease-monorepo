@@ -11,6 +11,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { PricingRulesManager } from "@/components/dashboard/PricingRulesManager";
 
 export default function ManageSpotPage() {
   const params = useParams();
@@ -87,17 +88,8 @@ export default function ManageSpotPage() {
       <div className="grid gap-6 md:grid-cols-2">
         {/* --- PRICING CARD --- */}
         <Card>
-          <CardHeader><CardTitle>Pricing Strategy</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label>Hourly Rate (₹)</Label>
-              <Input
-                type="number"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-              />
-            </div>
-            <Button onClick={handleSavePrice} className="w-full">Update Price</Button>
+          <CardContent className="pt-6">
+             <PricingRulesManager lotId={lot.id} />
           </CardContent>
         </Card>
 

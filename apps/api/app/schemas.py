@@ -61,6 +61,9 @@ class PricingCreate(BaseModel):
     lot_id: uuid.UUID
     rate: float
     rate_type: str = "HOURLY"
+    # New fields for B2B
+    name: str = "Standard Rate"
+    priority: int = 0
 
 
 # Response models
@@ -75,6 +78,10 @@ class PricingRead(BaseModel):
     id: uuid.UUID
     rate: float
     rate_type: str
+    # New fields
+    name: str
+    priority: int
+    is_active: bool
 
 
 class SpotRead(BaseModel):
@@ -115,3 +122,4 @@ class BookingResponse(BaseModel):
     amount: float
     currency: str
     status: str
+

@@ -43,26 +43,33 @@ async def search_spots(
             ParkingLot.id,
             ParkingLot.name,
             ParkingLot.address,
-            # FIX: Cast Geography to Geometry to extract coordinates
             func.ST_Y(func.cast(ParkingLot.location, Geometry)).label("latitude"),
             func.ST_X(func.cast(ParkingLot.location, Geometry)).label("longitude"),
             PricingRule.rate,
-            PricingRule.rate_type,
+            PricingRule.rate_type
         )
+        .distinct(ParkingLot.id) # <--- MAGICAL POSTGRES OPERATOR
         .join(ParkingSpot, ParkingSpot.lot_id == ParkingLot.id)
         .join(SpotAvailability, SpotAvailability.spot_id == ParkingSpot.id)
         .join(PricingRule, PricingRule.lot_id == ParkingLot.id)
-        .where(func.ST_DWithin(ParkingLot.location, user_location, radius_meters))
-        .where(ParkingSpot.spot_type == vehicle_type)
+        .where(
+            func.ST_DWithin(ParkingLot.location, user_location, radius_meters)
+        )
+        .where(
+            ParkingSpot.spot_type == vehicle_type
+        )
         .where(
             and_(
                 SpotAvailability.start_time <= start_db,
                 SpotAvailability.end_time >= end_db,
-                SpotAvailability.status == "AVAILABLE",
+                SpotAvailability.status == "AVAILABLE"
             )
         )
-        .where(PricingRule.is_active == True)
-        .distinct()
+        .where(
+            PricingRule.is_active == True
+        )
+        # Crucial: Order by Lot ID first (required for distinct), then Priority DESC
+        .order_by(ParkingLot.id, PricingRule.priority.desc())
     )
 
     results = await session.execute(statement)
