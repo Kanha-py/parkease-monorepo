@@ -100,3 +100,18 @@ class SearchResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BookingCreate(BaseModel):
+    lot_id: uuid.UUID
+    start_time: datetime
+    end_time: datetime
+    vehicle_type: str = "CAR"
+
+
+class BookingResponse(BaseModel):
+    booking_id: uuid.UUID
+    razorpay_order_id: str
+    amount: float
+    currency: str
+    status: str

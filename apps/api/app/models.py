@@ -88,3 +88,44 @@ class PricingRule(SQLModel, table=True):
 
     is_active: bool = Field(default=True)
     priority: int = Field(default=0)  # 0=Base, 10=Event (Higher overrides lower)
+
+
+# --- Booking & Payment ---
+
+
+class Booking(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+    driver_user_id: uuid.UUID = Field(foreign_key="user.id")
+    lot_id: uuid.UUID = Field(foreign_key="parkinglot.id")
+    spot_id: uuid.UUID = Field(foreign_key="parkingspot.id")
+
+    start_time: datetime = Field(index=True)
+    end_time: datetime = Field(index=True)
+
+    # Status: 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'
+    status: str = Field(default="PENDING", max_length=20)
+
+    # QR Code (Generated after payment)
+    qr_code_data: Optional[str] = Field(default=None, unique=True)
+    vehicle_plate: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Payment(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    booking_id: uuid.UUID = Field(foreign_key="booking.id")
+
+    razorpay_order_id: str = Field(index=True)
+    razorpay_payment_id: Optional[str] = Field(default=None)
+
+    amount_charged: float
+    commission_fee: float  # Our cut
+    seller_payout_amount: float  # Seller's share
+
+    # Status: 'PENDING', 'PAID_BY_DRIVER', 'PAYOUT_TO_SELLER_COMPLETE'
+    status: str = Field(default="PENDING", max_length=50)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
