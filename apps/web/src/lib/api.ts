@@ -1,12 +1,12 @@
-import axios from 'axios';
-import { useAuthStore } from '../store/useAuthStore';
+import axios from "axios";
+import { useAuthStore } from "../store/useAuthStore";
 
-const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
@@ -32,6 +32,35 @@ api.interceptors.response.use(
 );
 
 // --- Interfaces ---
+
+// --- Redemption Interfaces ---
+export interface BookingItem {
+  id: string;
+  lot_name: string;
+  address: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  qr_code_data: string | null;
+}
+
+export interface ScanResult {
+  success: boolean;
+  message: string;
+  driver_name?: string;
+  vehicle_plate?: string;
+}
+
+// --- Redemption Calls ---
+export const getMyBookings = async () => {
+  const response = await api.get<BookingItem[]>("/api/my-bookings");
+  return response.data;
+};
+
+export const scanQRCode = async (qrCode: string) => {
+  const response = await api.post<ScanResult>("/api/scan", { qr_code: qrCode });
+  return response.data;
+};
 
 export interface Lot {
   id: string;
@@ -110,23 +139,27 @@ export const setSpotPricing = async (lotId: string, rate: number) => {
   const response = await api.post("/my-spot/pricing", {
     lot_id: lotId,
     rate: rate,
-    rate_type: "HOURLY"
+    rate_type: "HOURLY",
   });
   return response.data;
 };
 
-export const setSpotAvailability = async (spotId: string, start: Date, end: Date) => {
+export const setSpotAvailability = async (
+  spotId: string,
+  start: Date,
+  end: Date
+) => {
   const response = await api.post("/my-spot/availability", {
     spot_id: spotId,
     start_time: start.toISOString(),
-    end_time: end.toISOString()
+    end_time: end.toISOString(),
   });
   return response.data;
 };
 
 export const searchParking = async (params: SearchParams) => {
   const response = await api.get<SearchResult[]>("/api/search/availability", {
-    params: params
+    params: params,
   });
   return response.data;
 };
