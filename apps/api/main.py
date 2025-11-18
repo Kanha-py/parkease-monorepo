@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from app.config import settings
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, lots, seller, search, bookings, redemption
+from app.routes import auth, lots, seller, search, bookings, redemption, payouts
 
 load_dotenv()  # Load .env file
 
@@ -45,3 +45,4 @@ app.include_router(seller.router, prefix="/my-spot", tags=["Seller"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
 app.include_router(bookings.router, prefix="/api/book", tags=["Bookings"])
 app.include_router(redemption.router, prefix="/api", tags=["Redemption"])
+app.include_router(payouts.router, prefix="/api/financials", tags=["Financials"])

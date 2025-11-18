@@ -22,15 +22,33 @@ export function LoginModal() {
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleSendOtp = async () => {
-    if (!phone || phone.length < 10) {
-      toast.error("Please enter a valid phone number.");
+    // 1. Remove spaces/dashes to get raw digits
+    let cleanPhone = phone.replace(/\s+/g, '').replace(/-/g, '');
+
+    // 2. Auto-format for India (+91) if only 10 digits are provided
+    if (cleanPhone.length === 10 && !cleanPhone.startsWith('+')) {
+      cleanPhone = `+91${cleanPhone}`;
+    }
+    // 3. Ensure it starts with '+' if it's a full number (e.g. 9198765...)
+    else if (cleanPhone.length > 10 && !cleanPhone.startsWith('+')) {
+      cleanPhone = `+${cleanPhone}`;
+    }
+
+    // 4. Validate E.164 format (Simple check: must start with + and have >10 chars)
+    if (!cleanPhone.startsWith('+') || cleanPhone.length < 12) {
+      toast.error("Please enter a valid mobile number with country code (e.g., 9876543210).");
       return;
     }
 
     setLoading(true);
     try {
-      await api.post("/auth/register-with-phone", { phone });
-      toast.success("OTP sent!", { description: "Check your server console." });
+      // Send the CLEAN phone number to the API
+      await api.post("/auth/register-with-phone", { phone: cleanPhone });
+
+      // Update the state so the next step uses the formatted number too
+      setPhone(cleanPhone);
+
+      toast.success("OTP sent via SMS!", { description: "Check your phone." });
       setStep("OTP");
     } catch (error) {
       console.error(error);
