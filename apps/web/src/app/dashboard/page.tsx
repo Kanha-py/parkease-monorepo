@@ -9,27 +9,28 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function DashboardPage() {
+  // --- FIX: Destructure _hasHydrated from the store ---
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
 
-  // 1. Handle Hydration (Wait for client-side load)
+  // 1. Handle Mounting
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // 2. Protect Route (Only run after mount)
+  // 2. Protect Route (Only runs after mounted AND store is hydrated)
   useEffect(() => {
-    if (isMounted && !user) {
+    if (isMounted && _hasHydrated && !user) { // <-- ADDED _hasHydrated check
       router.push("/");
     }
-  }, [isMounted, user, router]);
+  }, [isMounted, _hasHydrated, user, router]); // <-- ADDED _hasHydrated to dependency array
 
-  // 3. Fetch Data (Only if user exists)
+  // 3. Fetch Data (Only if user exists AND store is hydrated)
   useEffect(() => {
-    if (isMounted && user) {
+    if (isMounted && user && _hasHydrated) { // <-- CRITICAL FIX: Wait for both
       const fetchLots = async () => {
         try {
           const data = await getMyLots();
@@ -43,11 +44,11 @@ export default function DashboardPage() {
       };
       fetchLots();
     }
-  }, [isMounted, user]);
+  }, [isMounted, user, _hasHydrated]); // <-- ADDED _hasHydrated to dependency array
 
-  // Prevent rendering (and redirecting) until mounted
-  if (!isMounted) return null;
-  if (!user) return null;
+  // Prevent rendering (and subsequent API calls/redirects) until mounted AND hydrated
+  if (!isMounted || !_hasHydrated) return null; // <-- CRITICAL FIX: Wait for hydration
+  if (!user) return null; // This now correctly handles the redirect via useEffect
 
   return (
     <main className="container mx-auto py-12 px-4">

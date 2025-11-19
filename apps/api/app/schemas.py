@@ -17,6 +17,15 @@ class OTPVerify(BaseModel):
     name: str
 
 
+class UserSignup(BaseModel):
+    phone: str
+    otp: str
+    name: str
+    email: str
+    password: str
+    confirm_password: str = ""
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -125,4 +134,3 @@ class BookingResponse(BaseModel):
     amount: float
     currency: str
     status: str
-

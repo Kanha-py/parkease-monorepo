@@ -33,8 +33,20 @@ api.interceptors.response.use(
 
 // --- Interfaces ---
 
-// --- Redemption Interfaces ---
-// --- B2B Interfaces ---
+export interface LoginRequest {
+    email: string;
+    password: string;
+}
+
+export interface UserSignup {
+  phone: string;
+  otp: string;
+  name: string;
+  email: string;
+  password: string;
+  confirm_password: string; // Included for cleaner frontend data handling
+}
+
 export interface PricingRule {
   id: string;
   lot_id: string;
@@ -45,7 +57,24 @@ export interface PricingRule {
   is_active: boolean;
 }
 
-// --- B2B API Calls ---
+
+export const loginWithPassword = async (data: LoginRequest) => {
+    // This uses the existing /auth/login-with-password endpoint
+    const response = await api.post<Token>("/auth/login-with-password", data);
+    return response.data;
+};
+
+export const requestLoginOtp = async (data: { phone: string }) => {
+  const response = await api.post("/auth/login-request-otp", data);
+  return response.data;
+};
+
+export const signup = async (data: UserSignup) => {
+  // Uses the new kebab-case endpoint
+  const response = await api.post<Token>("/auth/signup", data);
+  return response.data;
+};
+
 export const getPricingRules = async (lotId: string) => {
   const response = await api.get<PricingRule[]>(`/api/b2b/lots/${lotId}/rules`);
   return response.data;
@@ -95,6 +124,7 @@ export const scanQRCode = async (qrCode: string) => {
   const response = await api.post<ScanResult>("/api/scan", { qr_code: qrCode });
   return response.data;
 };
+
 
 export interface Lot {
   id: string;

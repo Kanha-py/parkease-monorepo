@@ -7,8 +7,14 @@ import re  # <--- Import regex for cleaning up phone numbers
 
 from app.db import get_session
 from app.models import User
-from app.schemas import OTPRequest, OTPVerify, LoginRequest, Token
-from app.security import create_access_token, verify_password
+from app.schemas import (
+    OTPRequest,
+    OTPVerify,
+    LoginRequest,
+    Token,
+    UserSignup,
+)
+from app.security import create_access_token, verify_password, get_password_hash
 from app.config import settings
 
 router = APIRouter()
@@ -28,14 +34,64 @@ def standardize_phone(phone: str) -> str:
     return phone  # Assume any other format is already correct or handled by Pydantic
 
 
+@router.post("/login-request-otp")
+async def login_request_otp(payload: OTPRequest):
+    """
+    Generates and sends an OTP for the Login flow.
+    Does NOT check for existing users (allows re-login).
+    """
+    phone_key = standardize_phone(payload.phone)
+
+    # Generate OTP
+    otp = str(random.randint(100000, 999999))
+    MOCK_OTP_DB[phone_key] = otp
+
+    use_real_sms = (
+        settings.TWILIO_ACCOUNT_SID
+        and "dummy" not in settings.TWILIO_ACCOUNT_SID
+        and settings.TWILIO_AUTH_TOKEN
+    )
+
+    if use_real_sms:
+        try:
+            client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+            client.messages.create(
+                body=f"Your ParkEase login code is: {otp}",
+                from_=settings.TWILIO_PHONE_NUMBER,
+                to=phone_key,
+            )
+            return {"message": "OTP sent via SMS."}
+        except Exception as e:
+            print(f"Twilio Error: {e}")
+            print(f"!!! FALLBACK OTP for {phone_key}: {otp} !!!")
+            raise HTTPException(
+                status_code=500, detail="Failed to send SMS. Check server logs."
+            )
+    else:
+        # DEV MODE
+        print(f"!!! DEV OTP for {phone_key}: {otp} !!!")
+        return {"message": "OTP sent (Check server console)"}
+
+
 @router.post("/register-with-phone")
-async def register_with_phone(payload: OTPRequest):
+async def register_with_phone(
+    payload: OTPRequest, session: AsyncSession = Depends(get_session)
+):
     """
     Initiates login.
     """
     # FIX: Standardize the phone number immediately
     phone_key = standardize_phone(payload.phone)
+    statement = select(User).where(User.phone == phone_key)
+    result = await session.execute(statement)
+    existing_user = result.scalars().first()
 
+    if existing_user:
+        # User is already registered via phone. Raise Conflict error.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,  # 409 Conflict is better than 400 here
+            detail="Account already exists for this phone number. Please log in.",
+        )
     otp = str(random.randint(100000, 999999))
     MOCK_OTP_DB[phone_key] = otp  # <--- Store using the standardized key
 
@@ -114,14 +170,79 @@ async def verify_otp(payload: OTPVerify, session: AsyncSession = Depends(get_ses
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
 
+@router.post("/signup", response_model=Token)
+async def signup_complete(  # <-- Corrected function name
+    payload: UserSignup, session: AsyncSession = Depends(get_session)
+):
+    """
+    Finalize user registration: verifies OTP, checks for existing accounts,
+    creates user with email, phone, and hashed password.
+    """
+    if payload.password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+
+    phone_key = standardize_phone(payload.phone)
+
+    # 1. Re-Verify OTP (Critical step)
+    stored_otp = MOCK_OTP_DB.get(phone_key)
+    is_backdoor = payload.otp == "123456" and "dummy" in settings.TWILIO_ACCOUNT_SID
+
+    if not is_backdoor:
+        if not stored_otp or stored_otp != payload.otp:
+            # Do not clear OTP on failed attempt
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    # 2. Clear OTP (Security: One-time use)
+    if phone_key in MOCK_OTP_DB:
+        del MOCK_OTP_DB[phone_key]
+
+    # 3. Check for existing phone or email (Check if already registered)
+    phone_stmt = select(User).where(User.phone == phone_key)
+    email_stmt = select(User).where(User.email == payload.email)
+
+    existing_by_phone = (await session.execute(phone_stmt)).scalars().first()
+    if existing_by_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number is already registered. Please log in.",
+        )
+
+    existing_by_email = (await session.execute(email_stmt)).scalars().first()
+    if existing_by_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address is already registered.",
+        )
+
+    # 4. Hash password
+    hashed_password = get_password_hash(payload.password)
+
+    # 5. Create New User (Default to DRIVER role)
+    new_user = User(
+        phone=phone_key,
+        email=payload.email,
+        password_hash=hashed_password,
+        name=payload.name,
+        role="DRIVER",
+    )
+
+    session.add(new_user)
+    await session.commit()
+    await session.refresh(new_user)
+
+    # 6. Generate JWT
+    access_token = create_access_token(subject=new_user.id)
+
+    return {"access_token": access_token, "token_type": "bearer", "user": new_user}
+
+
 @router.post("/login-with-password", response_model=Token)
 async def login_with_password(
     payload: LoginRequest, session: AsyncSession = Depends(get_session)
 ):
     """
-    B2B / Admin login flow.
+    B2B / Admin login flow (remains unchanged)
     """
-    # This path does not need standardization if email is used as login key
     statement = select(User).where(User.email == payload.email)
     result = await session.execute(statement)
     user = result.scalars().first()
