@@ -17,6 +17,7 @@ class User(SQLModel, table=True):
         default="DRIVER", max_length=20
     )  # DRIVER, SELLER_C2B, OPERATOR_B2B
     profile_picture_url: Optional[str] = Field(default=None)
+    default_vehicle_plate: Optional[str] = Field(default=None, max_length=20)
     is_blocked: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -26,7 +27,8 @@ class PayoutAccount(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="user.id")
     account_type: str  # 'upi', 'bank_account'
-    account_details_encrypted: str  # Encrypted JSON
+    account_details_encrypted: str  # We will store raw JSON for MVP simplicity, encrypted in Prod
+    is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

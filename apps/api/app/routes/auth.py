@@ -268,24 +268,23 @@ async def update_profile(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Complete the user profile (Name, Email, Password) after phone verification.
+    Complete or Update user profile.
     """
-    # 1. Check if email is already taken by ANOTHER user
     if payload.email:
-        stmt = select(User).where(
-            User.email == payload.email, User.id != current_user.id
-        )
-        existing_email = (await session.execute(stmt)).scalars().first()
-        if existing_email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already in use.",
-            )
+        stmt = select(User).where(User.email == payload.email, User.id != current_user.id)
+        existing = (await session.execute(stmt)).scalars().first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use.")
 
-    # 2. Update fields
     current_user.name = payload.name
     current_user.email = payload.email
-    current_user.password_hash = get_password_hash(payload.password)
+    # Only hash if password is provided/changed (simple check for MVP)
+    if payload.password and len(payload.password) >= 6:
+        current_user.password_hash = get_password_hash(payload.password)
+
+    # Update Vehicle Plate
+    if payload.default_vehicle_plate:
+        current_user.default_vehicle_plate = payload.default_vehicle_plate.upper()
 
     session.add(current_user)
     await session.commit()

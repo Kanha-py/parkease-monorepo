@@ -100,6 +100,15 @@ export interface UserProfileUpdate {
   name: string;
   email: string;
   password: string;
+  default_vehicle_plate?: string;
+}
+
+export interface UserRead {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string;
+    default_vehicle_plate?: string;
 }
 
 export interface BookingItem {
@@ -244,4 +253,22 @@ export const createBooking = async (data: BookingRequest) => {
   return response.data;
 };
 
+export const setupPayoutAccount = async (upiId: string) => {
+    const response = await api.post<PayoutAccount>("/api/financials/account", {
+        account_type: "upi",
+        details: { upi_id: upiId }
+    });
+    return response.data;
+}
+
+export const getPayoutAccount = async () => {
+    try {
+        const response = await api.get<PayoutAccount>("/api/financials/account");
+        return response.data;
+    } catch (e) {
+        return null; // No account exists
+    }
+}
+
 export default api;
+

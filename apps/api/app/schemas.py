@@ -25,10 +25,13 @@ class UserSignup(BaseModel):
     password: str
     confirm_password: str = ""
 
+
 class UserProfileUpdate(BaseModel):
     name: str
     email: str
     password: str
+    default_vehicle_plate: Optional[str] = None
+
 
 class LoginRequest(BaseModel):
     email: str
@@ -42,6 +45,7 @@ class UserRead(BaseModel):
     phone: str
     role: str
     email: Optional[str] = None
+    default_vehicle_plate: Optional[str] = None
 
 
 class Token(BaseModel):
@@ -138,3 +142,14 @@ class BookingResponse(BaseModel):
     amount: float
     currency: str
     status: str
+
+
+class PayoutAccountCreate(BaseModel):
+    account_type: str = "upi"  # or 'bank'
+    details: dict  # e.g., {"upi_id": "rohan@okaxis"}
+
+
+class PayoutAccountRead(BaseModel):
+    id: uuid.UUID
+    account_type: str
+    is_active: bool

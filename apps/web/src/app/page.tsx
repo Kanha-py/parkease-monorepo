@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { UserMenu } from "@/components/layout/UserMenu"; // <--- Using the new Menu
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/useAuthStore";
 import {
   ShieldCheck,
   Zap,
@@ -22,6 +23,10 @@ import {
 } from "lucide-react";
 
 export default function Home() {
+  const { user } = useAuthStore();
+  // Helper boolean
+  const isSeller = user?.role === "SELLER_C2B" || user?.role === "OPERATOR_B2B";
+
   return (
     <div className="min-h-screen flex flex-col bg-white text-slate-900 font-sans selection:bg-blue-100">
 
@@ -38,6 +43,16 @@ export default function Home() {
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 md:gap-4">
+
+          {/* DYNAMIC LINK: Changes based on login status & role */}
+          <Link
+            href={isSeller ? "/hosting" : "/list-spot"}
+            className="hidden md:block text-sm font-medium text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-full transition-colors"
+          >
+            {isSeller ? "Switch to hosting" : "Become a Seller"}
+          </Link>
+
+          <div className="hidden md:block text-slate-300">|</div>
 
           {/* Download App (Visible on larger screens) */}
           <Button
@@ -65,7 +80,7 @@ export default function Home() {
       </header>
 
       <main className="flex-grow">
-
+        {/* ... (Rest of the file remains the same) ... */}
         {/* --- 2. Hero Section --- */}
         <section className="relative pt-12 pb-20 lg:pt-24 lg:pb-32 overflow-hidden">
           <div className="container mx-auto px-4">

@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"; // Removed DialogHeader import as we built a custom one
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/useAuthStore";
-// Update imports to include the new updateUserProfile
 import { api, loginWithPassword, requestLoginOtp, updateUserProfile } from "@/lib/api";
 import { toast } from "sonner";
 import axios from "axios";
@@ -19,7 +18,8 @@ import {
   Check,
   X,
   Eye,
-  EyeOff
+  EyeOff,
+  ShieldCheck
 } from "lucide-react";
 
 type FlowStep =
@@ -32,7 +32,6 @@ type FlowStep =
 interface LoginModalProps {
     isOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
-    defaultMode?: "login" | "signup";
 }
 
 export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
@@ -42,20 +41,18 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
 
   const [step, setStep] = useState<FlowStep>("WELCOME");
   const [loading, setLoading] = useState(false);
-
-  // Prevent multiple API calls
-  const requestInProgress = useRef(false);
+  const requestLock = useRef(false);
 
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
 
+  // Data State
   const [phone, setPhone] = useState("");
   const [otpValues, setOtpValues] = useState(["", "", "", "", "", ""]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
 
@@ -70,7 +67,6 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
 
   const getOtpString = () => otpValues.join("");
 
-  // Reset on close
   useEffect(() => {
     if (!show) {
         setTimeout(() => {
@@ -81,12 +77,12 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
             setEmail("");
             setPassword("");
             setLoading(false);
-            requestInProgress.current = false;
+            requestLock.current = false;
         }, 300);
     }
   }, [show]);
 
-  // --- OTP Input Logic ---
+  // --- OTP Logic ---
   const handleOtpChange = (index: number, value: string) => {
     if (isNaN(Number(value))) return;
     const newOtp = [...otpValues];
@@ -112,9 +108,9 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
     }
   };
 
-  // --- 1. Send OTP (Fixed Multiple Request Issue) ---
+  // --- 1. Send OTP ---
   const handlePhoneSubmit = async () => {
-    if (requestInProgress.current) return; // Stop if already sending
+    if (requestLock.current) return;
 
     const cleanPhone = standardizePhone(phone);
     if (cleanPhone.length < 12) {
@@ -123,70 +119,55 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
     }
 
     setLoading(true);
-    requestInProgress.current = true; // LOCK
+    requestLock.current = true;
+    setOtpValues(["", "", "", "", "", ""]);
 
     try {
-        // Try to register (initiate signup flow)
         await api.post("/auth/register-with-phone", { phone: cleanPhone });
-
         setIsNewUser(true);
         setStep("OTP_INPUT");
         toast.success("Verification code sent.");
-        // Clear OTPs on new send/resend
-        setOtpValues(["", "", "", "", "", ""]);
-
     } catch (error: any) {
         if (error.response?.status === 409) {
-            // User EXISTS -> Login Flow
             setIsNewUser(false);
             try {
                 await requestLoginOtp({ phone: cleanPhone });
                 setStep("OTP_INPUT");
                 toast.info("Welcome back! Enter OTP to login.");
-                setOtpValues(["", "", "", "", "", ""]);
             } catch (loginErr) {
-                toast.error("Failed to send code. Try again.");
+                toast.error("Failed to send code.");
             }
         } else {
-            toast.error("Network error. Please try again.");
+            toast.error("Network error.");
         }
     } finally {
         setLoading(false);
-        requestInProgress.current = false; // UNLOCK
+        requestLock.current = false;
     }
   };
 
-  // --- 2. Verify OTP (The "Verify First" Flow) ---
+  // --- 2. Verify OTP ---
   const handleOtpSubmit = async () => {
     const finalOtp = getOtpString();
     if (finalOtp.length !== 6) return;
-
     setLoading(true);
     try {
-        // We Verify IMMEDIATELY for both Login and Signup.
-        // verify-otp creates the user in DB (if new) and returns a token.
         const res = await api.post("/auth/verify-otp", {
             phone: standardizePhone(phone),
             otp: finalOtp,
-            name: "Driver", // Placeholder for now
+            name: "Driver",
         });
-
-        // Save the token! We need it for the next steps.
         setAuth(res.data.access_token, res.data.user);
-
         if (isNewUser) {
-            // If it was a Signup flow, we now have a "Partial User".
-            // Move to details to complete the profile.
-            toast.success("Verified! Now lets set up your profile.");
+            toast.success("Verified! Setup your profile.");
             setStep("USER_DETAILS");
         } else {
-            // Existing user -> Done.
             setShow(false);
             toast.success("Welcome back!");
             router.push("/dashboard");
         }
     } catch (error) {
-        toast.error("Invalid code. Please try again.");
+        toast.error("Invalid code or expired.");
     } finally {
         setLoading(false);
     }
@@ -201,17 +182,11 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
       setStep("CREATE_PASS");
   }
 
-  // --- 4. Final Profile Update (Using the Token) ---
+  // --- 4. Final Profile ---
   const handleFinalSignup = async () => {
     setLoading(true);
     try {
-        // We use the token we got in Step 2 to update the user
-        await updateUserProfile({
-            name,
-            email,
-            password
-        });
-
+        await updateUserProfile({ name, email, password });
         setShow(false);
         toast.success("Account created successfully!");
         router.push("/dashboard");
@@ -230,80 +205,105 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
   ];
   const isPasswordValid = passChecks.every(c => c.valid);
 
-  // --- Render ---
+  // --- BRAND COMPONENTS ---
+  const BrandHeader = () => (
+      <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center shadow-sm">
+            <span className="text-white font-bold text-lg">P</span>
+          </div>
+          <span className="font-bold text-xl tracking-tight text-slate-900">ParkEase</span>
+      </div>
+  );
+
   return (
     <Dialog open={show} onOpenChange={setShow}>
-      <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden rounded-2xl gap-0 bg-white text-slate-900">
+      <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden rounded-2xl gap-0 bg-white text-slate-900 shadow-2xl border-slate-100">
 
-        {/* Header */}
-        <DialogHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
-            {step !== "WELCOME" && (
-                <Button variant="ghost" size="icon" className="-ml-2 h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100" onClick={() => {
+        {/* FIX: Hidden DialogTitle for Accessibility */}
+        <DialogTitle className="sr-only">
+            {step === "WELCOME" ? "Log in or Sign up" : "Authentication"}
+        </DialogTitle>
+
+        {/* Header Navigation */}
+        <div className="px-4 pt-4 flex justify-between items-center">
+            {step !== "WELCOME" ? (
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500" onClick={() => {
                     if (step === "OTP_INPUT") setStep("WELCOME");
-                    // If going back from details, we are already logged in via OTP.
-                    // Warn user or allow them to just stay logged in as "Driver"?
-                    // For simplicity, we let them go back to edit details.
-                    if (step === "USER_DETAILS") setStep("OTP_INPUT"); // Visual back only
+                    if (step === "USER_DETAILS") setStep("OTP_INPUT");
                     if (step === "CREATE_PASS") setStep("USER_DETAILS");
                     if (step === "EMAIL_LOGIN") setStep("WELCOME");
                 }}>
                     <ChevronLeft className="w-5 h-5" />
                 </Button>
+            ) : (
+                <div className="w-8" /> // Spacer
             )}
-            <DialogTitle className="text-base font-bold w-full text-center mr-6 text-slate-800">
-                {step === "WELCOME" && "Log in or sign up"}
-                {step === "OTP_INPUT" && "Verify phone number"}
-                {step === "USER_DETAILS" && "Add your details"}
-                {step === "CREATE_PASS" && "Set a password"}
-                {step === "EMAIL_LOGIN" && "Log in"}
-            </DialogTitle>
-        </DialogHeader>
+        </div>
 
-        <div className="p-6">
-            {/* 1. WELCOME (Phone) */}
+        <div className="px-8 pb-10 pt-2">
+
+            {/* 1. WELCOME */}
             {step === "WELCOME" && (
-                <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <h3 className="text-xl font-semibold text-slate-900">Welcome to ParkEase</h3>
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <span className="text-slate-500 font-medium border-r border-slate-300 pr-2 mr-2">+91</span>
+                <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+                    <div className="text-center space-y-2">
+                        <BrandHeader />
+                        <h3 className="text-2xl font-extrabold tracking-tight">Welcome back</h3>
+                        <p className="text-slate-500 text-sm">Login or sign up to book your spot.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <span className="text-slate-500 font-bold border-r border-slate-300 pr-3 mr-1">+91</span>
+                            </div>
+                            <Input
+                                autoFocus
+                                placeholder="Mobile Number"
+                                className="pl-16 h-14 text-lg bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all rounded-xl"
+                                type="tel"
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                            />
                         </div>
-                        <Input
-                            autoFocus
-                            placeholder="Phone number"
-                            className="pl-14 h-12 text-lg bg-slate-50 border-slate-200 focus:bg-white transition-all"
-                            type="tel"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                        />
+
+                        <Button
+                            className="w-full h-14 text-lg font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98]"
+                            onClick={handlePhoneSubmit}
+                            disabled={loading}
+                        >
+                            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Continue"}
+                        </Button>
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                        We'll call or text you to confirm your number. Standard message and data rates apply.
-                    </p>
-                    <Button
-                        className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                        onClick={handlePhoneSubmit}
-                        disabled={loading}
-                    >
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Continue"}
-                    </Button>
+
                     <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200" /></div>
-                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400 font-medium">or</span></div>
+                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100" /></div>
+                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400 font-bold tracking-wider">or</span></div>
                     </div>
-                    <Button variant="outline" className="w-full h-12 border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium" onClick={() => setStep("EMAIL_LOGIN")}>
+
+                    <Button variant="outline" className="w-full h-14 border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-xl font-semibold transition-colors" onClick={() => setStep("EMAIL_LOGIN")}>
                         <Mail className="w-5 h-5 mr-2 text-slate-500" />
                         Continue with Email
                     </Button>
+
+                    <p className="text-[10px] text-center text-slate-400 leading-tight px-4">
+                        By continuing, you agree to our Terms of Service and Privacy Policy.
+                    </p>
                 </div>
             )}
 
             {/* 2. OTP INPUT */}
             {step === "OTP_INPUT" && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                     <div className="text-sm text-slate-600">
-                        Enter the 6-digit code sent to <span className="font-bold text-slate-900">{phone}</span>.
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-300">
+                     <div className="text-center">
+                        <div className="h-12 w-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
+                            <Smartphone className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-xl font-bold">Verify your number</h3>
+                        <p className="text-slate-500 text-sm mt-1">
+                            Enter the code sent to <span className="font-bold text-slate-900">{phone}</span>
+                        </p>
                     </div>
+
                     <div className="flex justify-between gap-2">
                         {otpValues.map((digit, index) => (
                             <Input
@@ -316,82 +316,106 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                                 onChange={(e) => handleOtpChange(index, e.target.value)}
                                 onKeyDown={(e) => handleOtpKeyDown(index, e)}
                                 onPaste={handleOtpPaste}
-                                className="w-12 h-12 text-center text-xl font-semibold bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all rounded-lg"
+                                className="w-12 h-14 text-center text-2xl font-bold bg-slate-50 border-slate-200 focus:border-blue-600 focus:ring-0 focus:bg-white transition-all rounded-lg caret-blue-600"
                             />
                         ))}
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                        <button className="font-semibold text-slate-800 hover:underline" onClick={handlePhoneSubmit}>Resend SMS</button>
-                    </div>
-                    <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 rounded-lg" onClick={handleOtpSubmit} disabled={loading || otpValues.some(d => d === "")}>
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Continue"}
+
+                    <Button
+                        className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl shadow-lg transition-all"
+                        onClick={handleOtpSubmit}
+                        disabled={loading || otpValues.some(d => d === "")}
+                    >
+                        {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Verify & Continue"}
                     </Button>
+
+                    <button className="w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-900" onClick={handlePhoneSubmit}>
+                        Didn't receive code? <span className="underline">Resend</span>
+                    </button>
                 </div>
             )}
 
             {/* 3. USER DETAILS */}
             {step === "USER_DETAILS" && (
-                <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-300">
+                    <div className="text-center mb-6">
+                        <h3 className="text-2xl font-bold">Almost there</h3>
+                        <p className="text-slate-500 text-sm">Finish setting up your account.</p>
+                    </div>
                     <div className="space-y-4">
                         <div className="space-y-1">
-                            <Label className="text-slate-600">Full Name</Label>
-                            <Input autoFocus placeholder="e.g. Rohan Kumar" className="h-11 bg-slate-50 border-slate-200" value={name} onChange={(e) => setName(e.target.value)} />
+                            <Label className="text-slate-600 ml-1">Full Name</Label>
+                            <Input autoFocus placeholder="e.g. Rohan Kumar" className="h-12 bg-slate-50 border-slate-200 rounded-xl" value={name} onChange={(e) => setName(e.target.value)} />
                         </div>
                         <div className="space-y-1">
-                            <Label className="text-slate-600">Email</Label>
-                            <Input type="email" placeholder="rohan@example.com" className="h-11 bg-slate-50 border-slate-200" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            <Label className="text-slate-600 ml-1">Email</Label>
+                            <Input type="email" placeholder="rohan@example.com" className="h-12 bg-slate-50 border-slate-200 rounded-xl" value={email} onChange={(e) => setEmail(e.target.value)} />
                         </div>
                     </div>
-                    <Button className="w-full h-12 mt-2 bg-blue-600 hover:bg-blue-700 rounded-lg" onClick={handleDetailsSubmit} disabled={!name || !email}>
-                        Continue
+                    <Button className="w-full h-14 mt-4 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl" onClick={handleDetailsSubmit} disabled={!name || !email}>
+                        Next Step
                     </Button>
                 </div>
             )}
 
             {/* 4. CREATE PASSWORD */}
             {step === "CREATE_PASS" && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="space-y-2">
-                        <Label className="text-slate-600">Create a password</Label>
-                        <div className="relative">
-                            <Input
-                                autoFocus
-                                type={showPassword ? "text" : "password"}
-                                placeholder="••••••••"
-                                className="h-12 pr-10 bg-slate-50 border-slate-200"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
-                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-300">
+                    <div className="text-center mb-2">
+                        <div className="h-12 w-12 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
+                            <ShieldCheck className="w-6 h-6" />
                         </div>
+                        <h3 className="text-xl font-bold">Secure your account</h3>
                     </div>
-                    <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Password Strength</p>
+
+                    <div className="relative">
+                        <Input
+                            autoFocus
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Create a password"
+                            className="h-14 pr-12 bg-slate-50 border-slate-200 rounded-xl text-lg"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">
+                            {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                        </button>
+                    </div>
+
+                    <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Requirements</p>
                         {passChecks.map((check, i) => (
-                            <div key={i} className="flex items-center gap-2 text-sm transition-all duration-200">
-                                <div className={`rounded-full p-0.5 ${check.valid ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-400"}`}>
-                                    {check.valid ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                            <div key={i} className="flex items-center gap-3 text-sm transition-all duration-200">
+                                <div className={`rounded-full p-1 ${check.valid ? "bg-green-500 text-white" : "bg-slate-200 text-slate-400"}`}>
+                                    <Check className="w-3 h-3" />
                                 </div>
                                 <span className={check.valid ? "text-slate-700 font-medium" : "text-slate-400"}>{check.label}</span>
                             </div>
                         ))}
                     </div>
-                    <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 rounded-lg transition-all" onClick={handleFinalSignup} disabled={loading || !isPasswordValid}>
-                         {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Agree and Join"}
+
+                    <Button
+                        className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg shadow-green-600/20"
+                        onClick={handleFinalSignup}
+                        disabled={loading || !isPasswordValid}
+                    >
+                         {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Create Account"}
                     </Button>
                 </div>
             )}
 
             {/* 5. EMAIL LOGIN */}
             {step === "EMAIL_LOGIN" && (
-                <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="space-y-4">
-                        <Input autoFocus placeholder="Email" type="email" className="h-12 bg-slate-50 border-slate-200" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
-                        <Input placeholder="Password" type="password" className="h-12 bg-slate-50 border-slate-200" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-300">
+                    <div className="text-center">
+                        <h3 className="text-2xl font-bold">Welcome back</h3>
+                        <p className="text-slate-500 text-sm">Login with your email.</p>
                     </div>
-                    <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 rounded-lg" onClick={() => {
+                    <div className="space-y-4">
+                        <Input autoFocus placeholder="Email address" type="email" className="h-14 bg-slate-50 border-slate-200 rounded-xl" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
+                        <Input placeholder="Password" type="password" className="h-14 bg-slate-50 border-slate-200 rounded-xl" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+                    </div>
+                    <Button className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl" onClick={() => {
                         setLoading(true);
                         loginWithPassword({ email: loginEmail, password: loginPass })
                             .then(res => {
@@ -405,10 +429,11 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                                 setLoading(false);
                             });
                     }} disabled={loading}>
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Log in"}
+                        {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Log in"}
                     </Button>
                 </div>
             )}
+
         </div>
       </DialogContent>
     </Dialog>
