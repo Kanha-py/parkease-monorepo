@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from sqlalchemy import and_
@@ -7,6 +7,7 @@ import razorpay
 import uuid
 from app.models import SpotAvailability
 from pytz import timezone
+from app.services.logger import log_event
 
 from app.db import get_session
 from app.models import (
@@ -22,6 +23,7 @@ from app.schemas import BookingCreate, BookingResponse
 from app.deps import get_current_user
 from app.config import settings
 
+
 router = APIRouter()
 
 # Initialize Razorpay Client
@@ -31,6 +33,7 @@ client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_S
 
 @router.post("/", response_model=BookingResponse)
 async def create_booking(
+    background_tasks: BackgroundTasks,
     payload: BookingCreate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -131,7 +134,17 @@ async def create_booking(
     )
     session.add(new_payment)
     await session.commit()
-
+    background_tasks.add_task(
+        log_event,
+        "booking_initiated",
+        str(current_user.id),
+        {
+            "booking_id": str(new_booking.id),
+            "lot_id": str(payload.lot_id),
+            "amount_paise": amount_paise,
+            "duration_hours": duration_hours,
+        },
+    )
     return BookingResponse(
         booking_id=new_booking.id,
         razorpay_order_id=order_data["id"],

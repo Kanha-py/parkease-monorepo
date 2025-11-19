@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, and_
 from sqlmodel import select
@@ -10,12 +10,14 @@ import uuid
 from app.db import get_session
 from app.models import ParkingLot, ParkingSpot, SpotAvailability, PricingRule
 from app.schemas import SearchResult
+from app.services.logger import log_event
 
 router = APIRouter()
 
 
 @router.get("/availability", response_model=list[SearchResult])
 async def search_spots(
+    background_tasks: BackgroundTasks,
     lat: float = Query(..., description="Latitude"),
     long: float = Query(..., description="Longitude"),
     start_time: datetime = Query(..., description="ISO Start Time"),
@@ -25,8 +27,7 @@ async def search_spots(
     session: AsyncSession = Depends(get_session),
 ):
     # 1. Handle Timezones
-    ist = timezone('Asia/Kolkata')
-
+    ist = timezone("Asia/Kolkata")
     start_ist = start_time.astimezone(ist)
     end_ist = end_time.astimezone(ist)
 
@@ -46,28 +47,22 @@ async def search_spots(
             func.ST_Y(func.cast(ParkingLot.location, Geometry)).label("latitude"),
             func.ST_X(func.cast(ParkingLot.location, Geometry)).label("longitude"),
             PricingRule.rate,
-            PricingRule.rate_type
+            PricingRule.rate_type,
         )
-        .distinct(ParkingLot.id) # <--- MAGICAL POSTGRES OPERATOR
+        .distinct(ParkingLot.id)  # <--- MAGICAL POSTGRES OPERATOR
         .join(ParkingSpot, ParkingSpot.lot_id == ParkingLot.id)
         .join(SpotAvailability, SpotAvailability.spot_id == ParkingSpot.id)
         .join(PricingRule, PricingRule.lot_id == ParkingLot.id)
-        .where(
-            func.ST_DWithin(ParkingLot.location, user_location, radius_meters)
-        )
-        .where(
-            ParkingSpot.spot_type == vehicle_type
-        )
+        .where(func.ST_DWithin(ParkingLot.location, user_location, radius_meters))
+        .where(ParkingSpot.spot_type == vehicle_type)
         .where(
             and_(
                 SpotAvailability.start_time <= start_db,
                 SpotAvailability.end_time >= end_db,
-                SpotAvailability.status == "AVAILABLE"
+                SpotAvailability.status == "AVAILABLE",
             )
         )
-        .where(
-            PricingRule.is_active == True
-        )
+        .where(PricingRule.is_active == True)
         # Crucial: Order by Lot ID first (required for distinct), then Priority DESC
         .order_by(ParkingLot.id, PricingRule.priority.desc())
     )
@@ -96,6 +91,20 @@ async def search_spots(
                 price=round(total_price, 2),
                 rate_type=r.rate_type,
             )
+        )
+        # 4. Log Event Asynchronously (MILESTONE 10 LOGIC)
+        background_tasks.add_task(
+            log_event,
+            "search_query",
+            None,  # User ID is not known for all searches
+            {
+                "search_lat": lat,
+                "search_long": long,
+                "vehicle": vehicle_type,
+                "duration_hours": duration_hours,
+                "results_count": len(search_results),
+                "radius_m": radius_meters,
+            },
         )
 
     return search_results

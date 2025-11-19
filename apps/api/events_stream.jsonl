@@ -1,0 +1,3 @@
+{"timestamp": "2025-11-19T05:02:45.416269", "event_type": "search_query", "user_id": null, "payload": {"search_lat": 19.0863795, "search_long": 72.8889774, "vehicle": "CAR", "duration_hours": 2.0, "results_count": 1, "radius_m": 20000}}
+{"timestamp": "2025-11-19T05:02:45.416856", "event_type": "search_query", "user_id": null, "payload": {"search_lat": 19.0863795, "search_long": 72.8889774, "vehicle": "CAR", "duration_hours": 2.0, "results_count": 1, "radius_m": 20000}}
+{"timestamp": "2025-11-19T05:02:49.623437", "event_type": "booking_initiated", "user_id": "aeda1b2f-2008-41a8-9658-c29e4970bfeb", "payload": {"booking_id": "be2f5c21-3bcc-4b45-88db-223d645d0bf5", "lot_id": "84469be8-8de9-4fc4-b26d-54982f96f3a5", "amount_paise": 30000, "duration_hours": 2.0}}
