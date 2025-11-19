@@ -13,8 +13,10 @@ from app.schemas import (
     LoginRequest,
     Token,
     UserSignup,
+    UserProfileUpdate,
+    UserRead,
 )
-from app.security import create_access_token, verify_password, get_password_hash
+from app.security import create_access_token, verify_password, get_password_hash, get_current_user
 from app.config import settings
 
 router = APIRouter()
@@ -257,3 +259,36 @@ async def login_with_password(
     access_token = create_access_token(subject=user.id)
 
     return {"access_token": access_token, "token_type": "bearer", "user": user}
+
+
+@router.patch("/profile", response_model=UserRead)
+async def update_profile(
+    payload: UserProfileUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Complete the user profile (Name, Email, Password) after phone verification.
+    """
+    # 1. Check if email is already taken by ANOTHER user
+    if payload.email:
+        stmt = select(User).where(
+            User.email == payload.email, User.id != current_user.id
+        )
+        existing_email = (await session.execute(stmt)).scalars().first()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already in use.",
+            )
+
+    # 2. Update fields
+    current_user.name = payload.name
+    current_user.email = payload.email
+    current_user.password_hash = get_password_hash(payload.password)
+
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
+
+    return current_user

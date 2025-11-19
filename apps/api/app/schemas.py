@@ -25,6 +25,10 @@ class UserSignup(BaseModel):
     password: str
     confirm_password: str = ""
 
+class UserProfileUpdate(BaseModel):
+    name: str
+    email: str
+    password: str
 
 class LoginRequest(BaseModel):
     email: str

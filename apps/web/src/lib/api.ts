@@ -34,8 +34,8 @@ api.interceptors.response.use(
 // --- Interfaces ---
 
 export interface LoginRequest {
-    email: string;
-    password: string;
+  email: string;
+  password: string;
 }
 
 export interface UserSignup {
@@ -57,11 +57,10 @@ export interface PricingRule {
   is_active: boolean;
 }
 
-
 export const loginWithPassword = async (data: LoginRequest) => {
-    // This uses the existing /auth/login-with-password endpoint
-    const response = await api.post<Token>("/auth/login-with-password", data);
-    return response.data;
+  // This uses the existing /auth/login-with-password endpoint
+  const response = await api.post<Token>("/auth/login-with-password", data);
+  return response.data;
 };
 
 export const requestLoginOtp = async (data: { phone: string }) => {
@@ -97,6 +96,12 @@ export const deletePricingRule = async (ruleId: string) => {
   return response.data;
 };
 
+export interface UserProfileUpdate {
+  name: string;
+  email: string;
+  password: string;
+}
+
 export interface BookingItem {
   id: string;
   lot_name: string;
@@ -124,7 +129,6 @@ export const scanQRCode = async (qrCode: string) => {
   const response = await api.post<ScanResult>("/api/scan", { qr_code: qrCode });
   return response.data;
 };
-
 
 export interface Lot {
   id: string;
@@ -188,6 +192,11 @@ export interface BookingResult {
 
 export const createLot = async (data: CreateLotData) => {
   const response = await api.post<Lot>("/lots/", data);
+  return response.data;
+};
+
+export const updateUserProfile = async (data: UserProfileUpdate) => {
+  const response = await api.patch<UserRead>("/auth/profile", data);
   return response.data;
 };
 
