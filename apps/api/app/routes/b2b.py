@@ -1,24 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from pydantic import BaseModel
 import uuid
 
 from app.db import get_session
 from app.models import User, PricingRule, ParkingLot
-from app.schemas import PricingCreate, PricingRead
+
+# UPDATED IMPORT: Added PricingRuleUpdate
+from app.schemas import PricingCreate, PricingRead, PricingRuleUpdate
 from app.deps import get_current_user
 
 router = APIRouter()
-
-
-# --- Schemas (Locally defined for now, or move to schemas.py) ---
-class PricingRuleUpdate(BaseModel):
-    name: str | None = None
-    rate: float | None = None
-    is_active: bool | None = None
-    priority: int | None = None
-
 
 # --- Endpoints ---
 

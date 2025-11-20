@@ -5,14 +5,12 @@ from app.config import settings
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import auth, lots, seller, search, bookings, redemption, payouts, b2b
 
-load_dotenv()  # Load .env file
+load_dotenv()
 
 app = FastAPI(title="ParkEase API", version="1.0")
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# UPDATE THIS: Allow all origins for development
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +28,6 @@ def health_check():
 
 @app.get("/api/health/keys")
 def check_keys():
-    # This endpoint confirms our .env keys are loaded
     return {
         "twilio_loaded": bool(os.getenv("TWILIO_ACCOUNT_SID")),
         "google_loaded": bool(os.getenv("GOOGLE_MAPS_API_KEY")),
@@ -38,7 +35,6 @@ def check_keys():
     }
 
 
-# Route inclusion
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(lots.router, prefix="/lots", tags=["Lots"])
 app.include_router(seller.router, prefix="/my-spot", tags=["Seller"])

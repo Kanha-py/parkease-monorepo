@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from datetime import datetime
+from pytz import timezone
 import uuid
 
 from app.db import get_session
-from app.models import User, Booking, ParkingLot, ParkingSpot
+from app.models import User, Booking, ParkingLot
 from app.deps import get_current_user
 from pydantic import BaseModel
 
@@ -53,18 +54,25 @@ async def get_my_bookings(
     result = await session.execute(stmt)
     rows = result.all()
 
-    return [
-        BookingListSchema(
-            id=row.Booking.id,
-            lot_name=row.name,
-            address=row.address,
-            start_time=row.Booking.start_time,
-            end_time=row.Booking.end_time,
-            status=row.Booking.status,
-            qr_code_data=row.Booking.qr_code_data,
+    # FIX: Safe unpacking of rows
+    bookings = []
+    for row in rows:
+        # Unpack the tuple (Booking instance, lot_name string, lot_address string)
+        booking_obj, lot_name, lot_address = row
+
+        bookings.append(
+            BookingListSchema(
+                id=booking_obj.id,
+                lot_name=lot_name,
+                address=lot_address,
+                start_time=booking_obj.start_time,
+                end_time=booking_obj.end_time,
+                status=booking_obj.status,
+                qr_code_data=booking_obj.qr_code_data,
+            )
         )
-        for row in rows
-    ]
+
+    return bookings
 
 
 @router.post("/scan", response_model=ScanResponse)
@@ -75,9 +83,6 @@ async def scan_booking(
 ):
     """
     Seller scans a QR code.
-    1. Find Booking.
-    2. Verify Seller owns the lot.
-    3. Verify Time (Is it valid right now?).
     """
     # 1. Find Booking
     stmt = (
@@ -92,26 +97,29 @@ async def scan_booking(
     if not row:
         raise HTTPException(status_code=404, detail="Invalid QR Code.")
 
+    # FIX: Safe unpacking
     booking, driver_name, lot_owner_id = row
 
-    # 2. Verify Ownership (Only the Lot Owner can scan)
+    # 2. Verify Ownership
     if lot_owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="You do not own this parking lot.")
 
-    # 3. Verify Logic
-    now = datetime.utcnow()  # Note: Use UTC comparison as DB is naive UTC
+    # 3. Verify Logic (Strict IST)
+    ist = timezone("Asia/Kolkata")
+    now_ist = datetime.now(ist).replace(tzinfo=None)
 
     if booking.status != "CONFIRMED":
         return ScanResponse(success=False, message=f"Booking is {booking.status}")
 
-    # Check if too early
-    if now < booking.start_time:
+    if now_ist < booking.start_time:
+        wait_minutes = int((booking.start_time - now_ist).total_seconds() / 60)
         return ScanResponse(
-            success=False, message="Too Early!", driver_name=driver_name
+            success=False,
+            message=f"Too Early! Check in starts in {wait_minutes} mins.",
+            driver_name=driver_name,
         )
 
-    # Check if expired
-    if now > booking.end_time:
+    if now_ist > booking.end_time:
         return ScanResponse(
             success=False, message="Booking Expired!", driver_name=driver_name
         )

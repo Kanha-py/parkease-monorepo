@@ -26,10 +26,11 @@ class UserSignup(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
-    name: str
-    email: str
-    password: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
     default_vehicle_plate: Optional[str] = None
+    profile_picture_url: Optional[str] = None
     bio: Optional[str] = None
     work: Optional[str] = None
     location: Optional[str] = None
@@ -190,6 +191,13 @@ class PricingRead(BaseModel):
     name: str
     priority: int
     is_active: bool
+
+
+class PricingRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    rate: Optional[float] = None
+    is_active: Optional[bool] = None
+    priority: Optional[int] = None
 
 
 class AvailabilityCreate(BaseModel):

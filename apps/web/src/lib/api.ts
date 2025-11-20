@@ -1,4 +1,3 @@
-// apps/web/src/lib/api.ts
 import axios from "axios";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -41,8 +40,6 @@ export interface UserRead {
   email?: string;
   profile_picture_url?: string;
   default_vehicle_plate?: string;
-
-  // New Profile Fields
   bio?: string;
   work?: string;
   location?: string;
@@ -67,6 +64,44 @@ export interface PayoutAccount {
   is_active: boolean;
 }
 
+export interface SearchResult {
+  lot_id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  price: number;
+  rate_type: string;
+}
+
+export interface BookingItem {
+  id: string;
+  lot_name: string;
+  address: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  qr_code_data?: string;
+  amount?: number;
+}
+
+export interface ScanResult {
+  success: boolean;
+  message: string;
+  driver_name?: string;
+  vehicle_plate?: string;
+}
+
+export interface PricingRule {
+  id: string;
+  lot_id: string;
+  name: string;
+  rate: number;
+  rate_type: string;
+  is_active: boolean;
+  priority: number;
+}
+
 export interface Preferences {
   currency: string;
   language: string;
@@ -78,6 +113,21 @@ export interface Notifications {
   sms_messages: boolean;
   push_reminders: boolean;
   email_promotions: boolean;
+}
+
+// --- NEW: Seller/Lot Interfaces ---
+export interface Spot {
+  id: string;
+  name: string;
+  spot_type: string;
+}
+
+export interface LotDetails {
+  id: string;
+  name: string;
+  address: string;
+  owner_user_id: string;
+  spots: Spot[];
 }
 
 // --- Auth Calls ---
@@ -136,7 +186,7 @@ export const updateNotifications = async (data: Notifications) => {
   return response.data;
 };
 
-// --- Other Calls (Lots, Bookings, etc.) ---
+// --- Inventory (Lots) ---
 
 export const createLot = async (data: any) => {
   const response = await api.post("/lots/", data);
@@ -149,7 +199,37 @@ export const getMyLots = async () => {
 };
 
 export const getLotDetails = async (lotId: string) => {
-  const response = await api.get(`/lots/${lotId}`);
+  const response = await api.get<LotDetails>(`/lots/${lotId}`);
+  return response.data;
+};
+
+// --- Seller Management (Availability & Pricing) ---
+// NEW: These were missing and causing your build error
+
+export const setSpotAvailability = async (data: {
+  spot_id: string;
+  start_time: string;
+  end_time: string;
+}) => {
+  const response = await api.post("/my-spot/availability", data);
+  return response.data;
+};
+
+export const setSpotPricing = async (data: {
+  lot_id: string;
+  rate: number;
+  rate_type: string;
+}) => {
+  const response = await api.post("/my-spot/pricing", data);
+  return response.data;
+};
+
+// --- Search & Booking ---
+
+export const searchParking = async (params: any) => {
+  const response = await api.get<SearchResult[]>("/api/search/availability", {
+    params,
+  });
   return response.data;
 };
 
@@ -157,6 +237,20 @@ export const createBooking = async (data: any) => {
   const response = await api.post("/api/book/", data);
   return response.data;
 };
+
+export const getMyBookings = async () => {
+  const response = await api.get<BookingItem[]>("/api/my-bookings");
+  return response.data;
+};
+
+// --- Redemption (Scan) ---
+
+export const scanQRCode = async (qrCode: string) => {
+  const response = await api.post<ScanResult>("/api/scan", { qr_code: qrCode });
+  return response.data;
+};
+
+// --- Financials ---
 
 export const setupPayoutAccount = async (upiId: string) => {
   const response = await api.post<PayoutAccount>("/api/financials/account", {
@@ -173,6 +267,27 @@ export const getPayoutAccount = async () => {
   } catch (e) {
     return null;
   }
+};
+
+// --- B2B Pricing Calls ---
+
+export const getPricingRules = async (lotId: string) => {
+  const response = await api.get<PricingRule[]>(`/api/b2b/lots/${lotId}/rules`);
+  return response.data;
+};
+
+export const createPricingRule = async (lotId: string, data: any) => {
+  const payload = { ...data, rate_type: "HOURLY" };
+  const response = await api.post<PricingRule>(
+    `/api/b2b/lots/${lotId}/rules`,
+    payload
+  );
+  return response.data;
+};
+
+export const deletePricingRule = async (ruleId: string) => {
+  const response = await api.delete(`/api/b2b/rules/${ruleId}`);
+  return response.data;
 };
 
 export default api;

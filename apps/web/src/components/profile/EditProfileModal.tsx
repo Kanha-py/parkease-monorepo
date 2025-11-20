@@ -7,28 +7,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/useAuthStore";
+import { updateUserProfile, UserRead } from "@/lib/api";
 import { toast } from "sonner";
-import { Camera, X, Plus, Trash2, Upload } from "lucide-react";
+import { Camera, Plus, Trash2, Upload, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EditProfileModalProps {
-    isOpen: boolean;
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    user: UserRead;
 }
 
-export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
-    const { user, updateUser } = useAuthStore();
+export function EditProfileModal({ open, onOpenChange, user }: EditProfileModalProps) {
+    const { token, setAuth } = useAuthStore();
 
-    // File Input Ref
+    // Refs & State
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [loading, setLoading] = useState(false);
 
-    // State
-    const [bio, setBio] = useState(user?.bio || "");
-    const [work, setWork] = useState(user?.work || "");
-    const [location, setLocation] = useState(user?.location || "");
-    const [languages, setLanguages] = useState(user?.languages || "");
-    const [interests, setInterests] = useState<string[]>(user?.interests || []);
-    const [photoPreview, setPhotoPreview] = useState(user?.profile_picture_url || "");
+    // Form Data
+    const [bio, setBio] = useState(user.bio || "");
+    const [work, setWork] = useState(user.work || "");
+    const [location, setLocation] = useState(user.location || "");
+    const [languages, setLanguages] = useState(user.languages || "");
+    const [interests, setInterests] = useState<string[]>(user.interests || []);
+    const [photoPreview, setPhotoPreview] = useState(user.profile_picture_url || "");
+    const [vehicle, setVehicle] = useState(user.default_vehicle_plate || "");
 
     const availableInterests = [
         "Foodie", "Hiking", "Tech", "History", "Art", "Music",
@@ -43,51 +47,57 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
         }
     };
 
-    // --- 1. Handle File Selection ---
+    // --- Handle File Selection ---
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // Check size (e.g., 2MB limit)
             if (file.size > 2 * 1024 * 1024) {
-                toast.error("Image size must be less than 2MB");
+                toast.error("Image too large (Max 2MB)");
                 return;
             }
-
-            // Convert to Data URL for preview
             const reader = new FileReader();
             reader.onloadend = () => {
-                const result = reader.result as string;
-                setPhotoPreview(result);
+                setPhotoPreview(reader.result as string);
                 toast.success("Photo selected");
             };
             reader.readAsDataURL(file);
         }
     };
 
-    const handleRemovePhoto = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setPhotoPreview("");
-        if (fileInputRef.current) fileInputRef.current.value = "";
-    };
+    const handleSave = async () => {
+        setLoading(true);
+        try {
+            const payload = {
+                name: user.name, // Keep existing name
+                bio,
+                work,
+                location,
+                languages,
+                interests,
+                profile_picture_url: photoPreview,
+                default_vehicle_plate: vehicle
+            };
 
-    const handleSave = () => {
-        updateUser({
-            bio,
-            work,
-            location,
-            languages,
-            interests,
-            profile_picture_url: photoPreview // Save the Data URL to store
-        });
-        toast.success("Profile saved");
-        onClose();
+            const updatedUser = await updateUserProfile(payload);
+
+            if (token) {
+                setAuth(token, updatedUser);
+            }
+
+            toast.success("Profile saved!");
+            onOpenChange(false);
+        } catch (error) {
+            toast.error("Failed to save profile.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[680px] p-0 gap-0 rounded-xl overflow-hidden bg-white max-h-[90vh] flex flex-col">
 
-                {/* Hidden Input for File Upload */}
+                {/* Hidden File Input */}
                 <input
                     type="file"
                     ref={fileInputRef}
@@ -111,10 +121,7 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                             <p className="text-sm text-slate-500">Visible to everyone</p>
                         </div>
 
-                        <div
-                            className="relative group cursor-pointer"
-                            onClick={() => fileInputRef.current?.click()}
-                        >
+                        <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                             <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-100 border-2 border-slate-200 group-hover:border-slate-900 transition-colors relative">
                                 {photoPreview ? (
                                     <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
@@ -124,8 +131,6 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                                         <span className="text-[10px] font-bold uppercase tracking-wide">Upload</span>
                                     </div>
                                 )}
-
-                                {/* Hover Overlay */}
                                 <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <Upload className="w-6 h-6 text-white drop-shadow-md" />
                                 </div>
@@ -133,13 +138,12 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
 
                             {photoPreview && (
                                 <button
-                                    onClick={handleRemovePhoto}
+                                    onClick={(e) => { e.stopPropagation(); setPhotoPreview(""); }}
                                     className="absolute -top-1 -right-1 bg-white text-red-500 p-1.5 rounded-full shadow-md border border-slate-100 hover:bg-red-50 transition-colors z-10"
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                             )}
-
                             <button className="text-sm font-semibold underline text-slate-900 mt-2 w-full text-center">
                                 {photoPreview ? "Change" : "Add"}
                             </button>
@@ -155,8 +159,8 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                             <Textarea
                                 value={bio}
                                 onChange={(e) => setBio(e.target.value)}
-                                className="min-h-[160px] text-base p-4 rounded-xl border-slate-400 focus:border-black focus:ring-1 focus:ring-black resize-none"
-                                placeholder="I love road trips..."
+                                className="min-h-[140px] text-base p-4 rounded-xl border-slate-300 focus:border-black focus:ring-1 focus:ring-black resize-none"
+                                placeholder="I love road trips and finding hidden gems..."
                             />
                             <span className="absolute bottom-4 right-4 text-xs text-slate-400">{bio.length}/450</span>
                         </div>
@@ -165,34 +169,23 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                     {/* Details */}
                     <div className="space-y-6">
                         <h3 className="text-xl font-semibold text-slate-900">Details</h3>
-
                         <div className="space-y-5">
                             <div className="space-y-2">
                                 <Label className="text-base font-medium text-slate-700">Where I live</Label>
-                                <Input
-                                    value={location}
-                                    onChange={(e) => setLocation(e.target.value)}
-                                    className="h-12 text-base border-slate-300 focus:border-black focus:ring-black rounded-lg"
-                                    placeholder="e.g. Mumbai, India"
-                                />
+                                <Input value={location} onChange={(e) => setLocation(e.target.value)} className="h-12 text-base rounded-lg" placeholder="e.g. Mumbai, India" />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-base font-medium text-slate-700">My work</Label>
-                                <Input
-                                    value={work}
-                                    onChange={(e) => setWork(e.target.value)}
-                                    className="h-12 text-base border-slate-300 focus:border-black focus:ring-black rounded-lg"
-                                    placeholder="e.g. Software Engineer"
-                                />
+                                <Input value={work} onChange={(e) => setWork(e.target.value)} className="h-12 text-base rounded-lg" placeholder="e.g. Software Engineer" />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-base font-medium text-slate-700">Languages I speak</Label>
-                                <Input
-                                    value={languages}
-                                    onChange={(e) => setLanguages(e.target.value)}
-                                    className="h-12 text-base border-slate-300 focus:border-black focus:ring-black rounded-lg"
-                                    placeholder="e.g. English, Hindi"
-                                />
+                                <Input value={languages} onChange={(e) => setLanguages(e.target.value)} className="h-12 text-base rounded-lg" placeholder="e.g. English, Hindi" />
+                            </div>
+                             <div className="space-y-2">
+                                <Label className="text-base font-medium text-slate-700">Vehicle Number (Optional)</Label>
+                                <Input value={vehicle} onChange={(e) => setVehicle(e.target.value)} className="h-12 text-base rounded-lg uppercase" placeholder="MH01AB1234" />
+                                <p className="text-xs text-slate-500">Helps hosts verify you quickly.</p>
                             </div>
                         </div>
                     </div>
@@ -210,8 +203,8 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                                         className={cn(
                                             "px-4 py-2.5 rounded-full text-sm font-medium transition-all border flex items-center gap-2",
                                             isSelected
-                                                ? "bg-slate-50 border-black text-black ring-1 ring-black"
-                                                : "bg-white text-slate-600 border-slate-300 hover:border-slate-800"
+                                                ? "bg-slate-900 border-slate-900 text-white shadow-md"
+                                                : "bg-white text-slate-600 border-slate-300 hover:border-slate-800 hover:bg-slate-50"
                                         )}
                                     >
                                         {tag}
@@ -223,11 +216,11 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                     </div>
                 </div>
 
-                {/* 3. Footer (Fixed) */}
-                <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center">
-                    <Button variant="ghost" className="font-semibold underline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSave} className="bg-slate-900 text-white hover:bg-black rounded-lg px-8 h-11 text-base font-semibold">
-                        Done
+                {/* 3. Footer */}
+                <div className="p-4 border-t border-slate-200 bg-white flex justify-between items-center sticky bottom-0 z-10">
+                    <Button variant="ghost" className="font-semibold underline hover:bg-slate-50" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button onClick={handleSave} disabled={loading} className="bg-slate-900 text-white hover:bg-black rounded-lg px-8 h-11 text-base font-semibold shadow-lg">
+                        {loading ? <Loader2 className="animate-spin w-5 h-5" /> : "Save"}
                     </Button>
                 </div>
 

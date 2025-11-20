@@ -7,18 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Smartphone, Monitor, ChevronRight, Facebook, Chrome } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 export default function LoginSecurityPage() {
-    const { user, setAuth } = useAuthStore();
+    const { user, setAuth, token } = useAuthStore();
 
-    // State
-    const [isEditingPassword, setIsEditingPassword] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
 
-    const handlePasswordUpdate = async () => {
+    if (!user) return null;
+
+    const handleUpdate = async () => {
         if (newPassword !== confirmPassword) {
             toast.error("Passwords do not match");
             return;
@@ -28,145 +30,81 @@ export default function LoginSecurityPage() {
             return;
         }
 
-        setIsLoading(true);
+        setLoading(true);
         try {
-            if (!user) return;
-            const updatedUser = await updateUserProfile({
-                name: user.name,
-                email: user.email || "",
-                password: newPassword,
-            });
+            const updatedUser = await updateUserProfile({ password: newPassword });
 
-            const token = useAuthStore.getState().token;
             if (token) setAuth(token, updatedUser);
 
-            toast.success("Password updated");
-            setIsEditingPassword(false);
+            toast.success("Password updated successfully");
+            setIsEditing(false);
             setNewPassword("");
             setConfirmPassword("");
-        } catch (error) {
+        } catch (error: any) {
             toast.error("Failed to update password");
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     };
 
     return (
-        <div className="max-w-3xl mx-auto space-y-10">
-
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-                <span className="hover:text-slate-900 cursor-pointer">Account</span>
-                <ChevronRight className="w-4 h-4" />
-                <span className="font-semibold text-slate-900">Login & security</span>
+        <div className="space-y-8 max-w-2xl">
+            <div>
+                <h1 className="text-2xl font-bold text-slate-900">Login & Security</h1>
+                <p className="text-slate-500 mt-1">Manage your password and account access.</p>
             </div>
 
-            <h1 className="text-3xl font-bold text-slate-900">Login & security</h1>
+            <Separator />
 
-            {/* --- SECTION 1: LOGIN --- */}
-            <section>
+            {/* Login Section */}
+            <section className="mb-10">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Login</h3>
-                <div className="border-b border-slate-200 pb-6">
+                <div className="border-b border-slate-100 pb-6">
                     <div className="flex justify-between items-start">
                         <div className="space-y-1">
                             <p className="font-medium text-slate-900">Password</p>
                             <p className="text-sm text-slate-500">Last updated recently</p>
                         </div>
                         <button
-                            onClick={() => setIsEditingPassword(!isEditingPassword)}
-                            className="text-slate-900 font-semibold underline hover:text-slate-600 text-sm"
+                            onClick={() => setIsEditing(!isEditing)}
+                            className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline"
                         >
-                            {isEditingPassword ? "Cancel" : "Update"}
+                            {isEditing ? "Cancel" : "Update"}
                         </button>
                     </div>
 
-                    {/* Expandable Form */}
-                    {isEditingPassword && (
-                        <div className="mt-6 max-w-md space-y-4 animate-in slide-in-from-top-2 duration-200">
+                    {isEditing && (
+                        <div className="mt-6 max-w-md space-y-4 animate-in slide-in-from-top-2 bg-slate-50 p-6 rounded-xl">
                             <div className="space-y-2">
                                 <Label>New password</Label>
-                                <Input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    className="h-12"
-                                />
+                                <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-11 bg-white" />
                             </div>
                             <div className="space-y-2">
                                 <Label>Confirm password</Label>
-                                <Input
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="h-12"
-                                />
+                                <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-11 bg-white" />
                             </div>
-                            <Button onClick={handlePasswordUpdate} disabled={isLoading} className="bg-slate-900 text-white h-12 px-6 mt-2">
-                                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update Password"}
-                            </Button>
+                            <div className="pt-2">
+                                <Button onClick={handleUpdate} disabled={loading} className="bg-slate-900 hover:bg-black text-white px-8 h-11 w-full sm:w-auto">
+                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update Password"}
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </div>
             </section>
 
-            {/* --- SECTION 2: SOCIAL ACCOUNTS --- */}
+            {/* Social Accounts (Placeholder) */}
             <section>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4 mt-8">Social accounts</h3>
-
-                {/* Facebook */}
-                <div className="border-b border-slate-200 py-6 flex justify-between items-center">
-                    <div className="space-y-1">
-                        <p className="font-medium text-slate-900">Facebook</p>
-                        <p className="text-sm text-slate-500">Not connected</p>
-                    </div>
-                    <button className="text-slate-900 font-semibold underline hover:text-slate-600 text-sm" onClick={() => toast.info("Social login coming in Phase 2")}>
-                        Connect
-                    </button>
-                </div>
-
-                {/* Google */}
-                <div className="border-b border-slate-200 py-6 flex justify-between items-center">
+                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Social accounts</h3>
+                 <div className="border-b border-slate-100 py-4 flex justify-between items-center">
                     <div className="space-y-1">
                         <p className="font-medium text-slate-900">Google</p>
-                        <p className="text-sm text-green-600">Connected</p>
+                        <p className="text-sm text-slate-500">Not connected</p>
                     </div>
-                    <button className="text-slate-900 font-semibold underline hover:text-slate-600 text-sm">
-                        Disconnect
+                    <button className="text-sm font-semibold text-slate-400 cursor-not-allowed">
+                        Connect
                     </button>
-                </div>
-            </section>
-
-            {/* --- SECTION 3: DEVICE HISTORY --- */}
-            <section>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4 mt-8">Device history</h3>
-
-                {/* Current Session */}
-                <div className="py-6 border-b border-slate-200">
-                    <div className="flex items-start gap-4">
-                        <Monitor className="w-8 h-8 text-slate-400" />
-                        <div className="flex-1">
-                            <p className="font-medium text-slate-900">Windows 10 · Chrome</p>
-                            <p className="text-sm text-slate-500">Mumbai, India · <span className="text-green-600 font-medium">Current session</span></p>
-                        </div>
-                        <button className="text-slate-900 font-semibold underline hover:text-slate-600 text-sm" onClick={() => toast.success("Logged out")}>
-                            Log out device
-                        </button>
-                    </div>
-                </div>
-
-                {/* Past Session */}
-                <div className="py-6 border-b border-slate-200">
-                    <div className="flex items-start gap-4">
-                        <Smartphone className="w-8 h-8 text-slate-400" />
-                        <div className="flex-1">
-                            <p className="font-medium text-slate-900">iPhone 13 · ParkEase App</p>
-                            <p className="text-sm text-slate-500">Pune, India · October 28 at 4:30 PM</p>
-                        </div>
-                        <button className="text-slate-900 font-semibold underline hover:text-slate-600 text-sm">
-                            Log out device
-                        </button>
-                    </div>
-                </div>
+                 </div>
             </section>
         </div>
     );

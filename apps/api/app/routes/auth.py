@@ -2,14 +2,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-import random
 from twilio.rest import Client
+import random
 import re
-from typing import List  # <--- FIXED: Added List import
-import uuid
+from typing import List
 from datetime import datetime
+
 from app.db import get_session
-from app.models import User, UserPreferences, NotificationSettings, UserSession
+from app.models import (
+    User,
+    UserPreferences,
+    NotificationSettings,
+    UserSession,
+)
 from app.schemas import (
     OTPRequest,
     OTPVerify,
@@ -31,10 +36,18 @@ from app.security import (
     get_current_user,
 )
 from app.config import settings
+from app.core.redis_client import redis_client
 
 router = APIRouter()
 
-MOCK_OTP_DB = {}
+# Initialize Twilio
+twilio_client = (
+    Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    if settings.TWILIO_ACCOUNT_SID and "dummy" not in settings.TWILIO_ACCOUNT_SID
+    else None
+)
+
+OTP_EXPIRY_SECONDS = 300
 
 
 def standardize_phone(phone: str) -> str:
@@ -46,16 +59,7 @@ def standardize_phone(phone: str) -> str:
     return phone
 
 
-# ... (Existing Auth/OTP routes remain unchanged) ...
-@router.post("/login-request-otp")
-async def login_request_otp(payload: OTPRequest):
-    phone_key = standardize_phone(payload.phone)
-    otp = str(random.randint(100000, 999999))
-    MOCK_OTP_DB[phone_key] = otp
-
-    # ... Twilio Logic ...
-    print(f"!!! DEV OTP for {phone_key}: {otp} !!!")
-    return {"message": "OTP sent"}
+# --- 1. OTP & Registration Routes ---
 
 
 @router.post("/register-with-phone")
@@ -63,68 +67,131 @@ async def register_with_phone(
     payload: OTPRequest, session: AsyncSession = Depends(get_session)
 ):
     phone_key = standardize_phone(payload.phone)
+
     statement = select(User).where(User.phone == phone_key)
     result = await session.execute(statement)
     existing_user = result.scalars().first()
 
     if existing_user:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Account exists."
+            status_code=status.HTTP_409_CONFLICT, detail="Account exists. Please login."
         )
 
     otp = str(random.randint(100000, 999999))
-    MOCK_OTP_DB[phone_key] = otp
-    print(f"!!! DEV OTP for {phone_key}: {otp} !!!")
-    return {"message": "OTP sent"}
+    await redis_client.set(f"otp:{phone_key}", otp, ex=OTP_EXPIRY_SECONDS)
+
+    try:
+        if twilio_client:
+            twilio_client.messages.create(
+                body=f"Your ParkEase verification code is: {otp}",
+                from_=settings.TWILIO_PHONE_NUMBER,
+                to=phone_key,
+            )
+        else:
+            print(f"!!! DEV REGISTER OTP for {phone_key}: {otp} !!!")
+    except Exception as e:
+        print(f"Twilio Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send SMS.")
+
+    return {"message": "OTP sent successfully"}
 
 
-@router.post("/verify-otp", response_model=Token)
-async def verify_otp(payload: OTPVerify, session: AsyncSession = Depends(get_session)):
+@router.post("/login-request-otp")
+async def login_request_otp(
+    payload: OTPRequest, session: AsyncSession = Depends(get_session)
+):
     phone_key = standardize_phone(payload.phone)
-    stored_otp = MOCK_OTP_DB.get(phone_key)
-
-    is_backdoor = payload.otp == "123456" and "dummy" in settings.TWILIO_ACCOUNT_SID
-    if not is_backdoor and (not stored_otp or stored_otp != payload.otp):
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-
-    if phone_key in MOCK_OTP_DB:
-        del MOCK_OTP_DB[phone_key]
 
     statement = select(User).where(User.phone == phone_key)
     result = await session.execute(statement)
     user = result.scalars().first()
 
     if not user:
-        user = User(phone=phone_key, name=payload.name, role="DRIVER")
+        raise HTTPException(
+            status_code=404, detail="Account not found. Please register first."
+        )
+
+    otp = str(random.randint(100000, 999999))
+    await redis_client.set(f"otp:{phone_key}", otp, ex=OTP_EXPIRY_SECONDS)
+
+    try:
+        if twilio_client:
+            twilio_client.messages.create(
+                body=f"Your ParkEase login code is: {otp}",
+                from_=settings.TWILIO_PHONE_NUMBER,
+                to=phone_key,
+            )
+        else:
+            print(f"!!! DEV LOGIN OTP for {phone_key}: {otp} !!!")
+    except Exception as e:
+        print(f"Twilio Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send SMS.")
+
+    return {"message": "OTP sent"}
+
+
+@router.post("/verify-otp", response_model=Token)
+async def verify_otp(
+    request: Request, payload: OTPVerify, session: AsyncSession = Depends(get_session)
+):
+    phone_key = standardize_phone(payload.phone)
+    stored_otp = await redis_client.get(f"otp:{phone_key}")
+
+    is_backdoor = payload.otp == "123456" and (
+        not settings.TWILIO_ACCOUNT_SID or "dummy" in settings.TWILIO_ACCOUNT_SID
+    )
+
+    if not is_backdoor:
+        if not stored_otp:
+            raise HTTPException(status_code=400, detail="OTP expired or invalid.")
+        if stored_otp != payload.otp:
+            raise HTTPException(status_code=400, detail="Incorrect OTP.")
+        await redis_client.delete(f"otp:{phone_key}")
+
+    statement = select(User).where(User.phone == phone_key)
+    result = await session.execute(statement)
+    user = result.scalars().first()
+
+    if not user:
+        user = User(phone=phone_key, name=payload.name or "User", role="DRIVER")
         session.add(user)
         await session.commit()
         await session.refresh(user)
 
-        # Initialize Default Settings
         session.add(UserPreferences(user_id=user.id))
         session.add(NotificationSettings(user_id=user.id))
-        await session.commit()
 
-    access_token = create_access_token(subject=user.id)
+    new_session = UserSession(
+        user_id=user.id,
+        device_name=request.headers.get("User-Agent", "Unknown"),
+        ip_address=request.client.host or "Unknown",
+        is_current=True,
+        last_active=datetime.utcnow(),
+    )
+    session.add(new_session)
+    await session.commit()
+
+    access_token = create_access_token(subject=str(user.id))
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
 
 @router.post("/signup", response_model=Token)
 async def signup_complete(
-    payload: UserSignup, session: AsyncSession = Depends(get_session)
+    request: Request, payload: UserSignup, session: AsyncSession = Depends(get_session)
 ):
     if payload.password != payload.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match.")
 
     phone_key = standardize_phone(payload.phone)
-    stored_otp = MOCK_OTP_DB.get(phone_key)
-    is_backdoor = payload.otp == "123456" and "dummy" in settings.TWILIO_ACCOUNT_SID
+    stored_otp = await redis_client.get(f"otp:{phone_key}")
+    is_backdoor = payload.otp == "123456" and (
+        not settings.TWILIO_ACCOUNT_SID or "dummy" in settings.TWILIO_ACCOUNT_SID
+    )
 
-    if not is_backdoor and (not stored_otp or stored_otp != payload.otp):
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-
-    if phone_key in MOCK_OTP_DB:
-        del MOCK_OTP_DB[phone_key]
+    if not is_backdoor:
+        if not stored_otp or stored_otp != payload.otp:
+            raise HTTPException(status_code=400, detail="Invalid OTP.")
+        await redis_client.delete(f"otp:{phone_key}")
 
     hashed_password = get_password_hash(payload.password)
     new_user = User(
@@ -138,18 +205,28 @@ async def signup_complete(
     await session.commit()
     await session.refresh(new_user)
 
-    # Initialize Default Settings
     session.add(UserPreferences(user_id=new_user.id))
     session.add(NotificationSettings(user_id=new_user.id))
+
+    new_session = UserSession(
+        user_id=new_user.id,
+        device_name=request.headers.get("User-Agent", "Unknown"),
+        ip_address=request.client.host or "Unknown",
+        is_current=True,
+        last_active=datetime.utcnow(),
+    )
+    session.add(new_session)
     await session.commit()
 
-    access_token = create_access_token(subject=new_user.id)
+    access_token = create_access_token(subject=str(new_user.id))
     return {"access_token": access_token, "token_type": "bearer", "user": new_user}
 
 
 @router.post("/login-with-password", response_model=Token)
 async def login_with_password(
-    payload: LoginRequest, session: AsyncSession = Depends(get_session)
+    request: Request,
+    payload: LoginRequest,
+    session: AsyncSession = Depends(get_session),
 ):
     statement = select(User).where(User.email == payload.email)
     result = await session.execute(statement)
@@ -162,11 +239,21 @@ async def login_with_password(
     ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access_token = create_access_token(subject=user.id)
+    new_session = UserSession(
+        user_id=user.id,
+        device_name=request.headers.get("User-Agent", "Unknown"),
+        ip_address=request.client.host or "Unknown",
+        is_current=True,
+        last_active=datetime.utcnow(),
+    )
+    session.add(new_session)
+    await session.commit()
+
+    access_token = create_access_token(subject=str(user.id))
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
 
-# --- UPDATED PROFILE ROUTE ---
+# --- 2. Profile & Settings Routes (FIXED) ---
 
 
 @router.patch("/profile", response_model=UserRead)
@@ -175,6 +262,9 @@ async def update_profile(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Updates user profile. Fields not sent (None) are ignored.
+    """
     # Email Uniqueness Check
     if payload.email and payload.email != current_user.email:
         stmt = select(User).where(User.email == payload.email)
@@ -182,19 +272,17 @@ async def update_profile(
         if existing:
             raise HTTPException(status_code=400, detail="Email already in use.")
 
-    # Basic Fields
-    current_user.name = payload.name
-    current_user.email = payload.email
-
-    # Password
+    # Only update fields that are present in the payload
+    if payload.name is not None:
+        current_user.name = payload.name
+    if payload.email is not None:
+        current_user.email = payload.email
     if payload.password and len(payload.password) >= 6:
         current_user.password_hash = get_password_hash(payload.password)
-
-    # Vehicle
-    if payload.default_vehicle_plate:
+    if payload.default_vehicle_plate is not None:
         current_user.default_vehicle_plate = payload.default_vehicle_plate.upper()
-
-    # New Profile Fields
+    if payload.profile_picture_url is not None:
+        current_user.profile_picture_url = payload.profile_picture_url
     if payload.bio is not None:
         current_user.bio = payload.bio
     if payload.work is not None:
@@ -211,11 +299,7 @@ async def update_profile(
     session.add(current_user)
     await session.commit()
     await session.refresh(current_user)
-
     return current_user
-
-
-# --- NEW ACCOUNT SETTINGS ROUTES ---
 
 
 @router.get("/settings/preferences", response_model=PreferencesRead)
@@ -225,14 +309,10 @@ async def get_preferences(
 ):
     stmt = select(UserPreferences).where(UserPreferences.user_id == current_user.id)
     prefs = (await session.execute(stmt)).scalars().first()
-
     if not prefs:
-        # Create default if missing
         prefs = UserPreferences(user_id=current_user.id)
         session.add(prefs)
         await session.commit()
-        await session.refresh(prefs)
-
     return prefs
 
 
@@ -244,12 +324,13 @@ async def update_preferences(
 ):
     stmt = select(UserPreferences).where(UserPreferences.user_id == current_user.id)
     prefs = (await session.execute(stmt)).scalars().first()
-
     if not prefs:
         prefs = UserPreferences(user_id=current_user.id)
 
-    prefs.currency = payload.currency
-    prefs.language = payload.language
+    if payload.currency:
+        prefs.currency = payload.currency
+    if payload.language:
+        prefs.language = payload.language
 
     session.add(prefs)
     await session.commit()
@@ -266,13 +347,10 @@ async def get_notifications(
         NotificationSettings.user_id == current_user.id
     )
     notifs = (await session.execute(stmt)).scalars().first()
-
     if not notifs:
         notifs = NotificationSettings(user_id=current_user.id)
         session.add(notifs)
         await session.commit()
-        await session.refresh(notifs)
-
     return notifs
 
 
@@ -286,14 +364,17 @@ async def update_notifications(
         NotificationSettings.user_id == current_user.id
     )
     notifs = (await session.execute(stmt)).scalars().first()
-
     if not notifs:
         notifs = NotificationSettings(user_id=current_user.id)
 
-    notifs.email_messages = payload.email_messages
-    notifs.sms_messages = payload.sms_messages
-    notifs.push_reminders = payload.push_reminders
-    notifs.email_promotions = payload.email_promotions
+    if payload.email_messages is not None:
+        notifs.email_messages = payload.email_messages
+    if payload.sms_messages is not None:
+        notifs.sms_messages = payload.sms_messages
+    if payload.push_reminders is not None:
+        notifs.push_reminders = payload.push_reminders
+    if payload.email_promotions is not None:
+        notifs.email_promotions = payload.email_promotions
 
     session.add(notifs)
     await session.commit()
@@ -303,19 +384,13 @@ async def update_notifications(
 
 @router.get("/settings/sessions", response_model=List[SessionRead])
 async def get_sessions(
-    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    # In a real app, this table is populated by middleware on every request
-    # For MVP, we mock the current session based on the request
-    current_ip = request.client.host if request.client else "Unknown"
-
-    mock_session = SessionRead(
-        id=uuid.uuid4(),
-        device_name="Current Browser",
-        location="Detected Location",
-        last_active=datetime.utcnow(),
-        is_current=True,
+    stmt = (
+        select(UserSession)
+        .where(UserSession.user_id == current_user.id)
+        .order_by(UserSession.last_active.desc())
     )
-    return [mock_session]
+    result = await session.execute(stmt)
+    return result.scalars().all()

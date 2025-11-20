@@ -3,58 +3,34 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLoadScript } from "@react-google-maps/api";
-import usePlacesAutocomplete, { getGeocode, getLatLng } from "use-places-autocomplete";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button"; // <--- Import Button
+import { PlacesAutocomplete } from "./PlacesAutocomplete";
+import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "./DateRangePicker";
+import { Search, Loader2 } from "lucide-react";
 
-const libraries: ("places")[] = ["places"];
+const LIBRARIES: ("places")[] = ["places"];
 
-// --- 1. Inner Component (Contains Logic) ---
 function SearchInput() {
   const router = useRouter();
 
-  // Time State
+  // State
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [date, setDate] = useState<Date>(new Date());
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("12:00");
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const [date, setDate] = useState(tomorrow.toISOString().split('T')[0]);
 
-  // Coordinate State (New)
-  const [selectedCoords, setSelectedCoords] = useState<{ lat: number, lng: number } | null>(null);
+  const handleSearch = () => {
+    const lat = coords?.lat || 19.0760; // Default Mumbai
+    const lng = coords?.lng || 72.8777;
 
-  const {
-    ready,
-    value,
-    setValue,
-    suggestions: { status, data },
-    clearSuggestions,
-  } = usePlacesAutocomplete();
-
-  const handleSelect = async (address: string) => {
-    setValue(address, false);
-    clearSuggestions();
-
-    try {
-      const results = await getGeocode({ address });
-      const { lat, lng } = await getLatLng(results[0]);
-      // UX FIX: Just store coordinates, don't navigate yet
-      setSelectedCoords({ lat, lng });
-    } catch (error) {
-      console.error("Error: ", error);
-    }
-  };
-
-  const handleSearchClick = () => {
-    if (!selectedCoords) return;
-
-    const start = new Date(`${date}T${startTime}:00`);
-    const end = new Date(`${date}T${endTime}:00`);
+    // Construct ISO strings
+    const dateStr = date.toISOString().split('T')[0];
+    const start = new Date(`${dateStr}T${startTime}:00`);
+    const end = new Date(`${dateStr}T${endTime}:00`);
 
     const params = new URLSearchParams({
-      lat: selectedCoords.lat.toString(),
-      long: selectedCoords.lng.toString(),
+      lat: lat.toString(),
+      long: lng.toString(),
       start: start.toISOString(),
       end: end.toISOString()
     });
@@ -63,73 +39,47 @@ function SearchInput() {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl border space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+    <div className="flex flex-col lg:flex-row gap-3 w-full max-w-4xl bg-white p-2 rounded-3xl shadow-2xl shadow-blue-900/10 border border-slate-100">
 
-        {/* Location Input */}
-        <div className="md:col-span-3 relative">
-          <Label>Where to?</Label>
-          <Input
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setSelectedCoords(null); // Reset selection if typing
-            }}
-            disabled={!ready}
-            placeholder="Search location (e.g. Phoenix Mall)"
-            className="mt-1"
-          />
-          {status === "OK" && (
-            <ul className="absolute z-10 bg-white border mt-1 w-full rounded-md shadow-md max-h-60 overflow-auto">
-              {data.map(({ place_id, description }) => (
-                <li
-                  key={place_id}
-                  onClick={() => handleSelect(description)}
-                  className="p-2 hover:bg-slate-100 cursor-pointer text-sm"
-                >
-                  {description}
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* 1. Location Input (Large) */}
+        <div className="flex-1 relative z-20">
+            <PlacesAutocomplete
+                isLoaded={true} // Parent handles loading
+                onSelect={(lat, lng) => setCoords({ lat, lng })}
+            />
         </div>
 
-        {/* Time Inputs */}
-        <div>
-          <Label>Date</Label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+        {/* 2. Date/Time Picker */}
+        <div className="flex-shrink-0">
+            <DateRangePicker
+                date={date} setDate={setDate}
+                startTime={startTime} setStartTime={setStartTime}
+                endTime={endTime} setEndTime={setEndTime}
+            />
         </div>
-        <div>
-          <Label>Start</Label>
-          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1" />
-        </div>
-        <div>
-          <Label>End</Label>
-          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1" />
-        </div>
-      </div>
 
-      {/* Search Button (New) */}
-      <Button
-        className="w-full"
-        size="lg"
-        onClick={handleSearchClick}
-        disabled={!selectedCoords} // Disable until location picked
-      >
-        Find Parking Spots
-      </Button>
+        {/* 3. Search Button */}
+        <Button
+            size="lg"
+            className="h-12 px-8 rounded-2xl bg-slate-900 hover:bg-black text-white font-bold shadow-lg"
+            onClick={handleSearch}
+        >
+            <Search className="w-5 h-5 mr-2" />
+            Search
+        </Button>
     </div>
   );
 }
 
-// --- 2. Wrapper Component ---
+// Wrapper
 export function SearchBar() {
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
-    libraries: libraries,
+    libraries: LIBRARIES,
+    id: "google-map-script-bar"
   });
 
-  if (!isLoaded) return <div className="p-4 text-center">Loading Maps...</div>;
+  if (!isLoaded) return <div className="flex items-center gap-2 text-slate-400 p-4"><Loader2 className="animate-spin"/> Loading Maps...</div>;
 
   return <SearchInput />;
 }

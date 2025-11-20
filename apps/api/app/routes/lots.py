@@ -3,11 +3,10 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from geoalchemy2.elements import WKTElement
-from app.schemas import LotReadWithSpots, SpotRead
 
 from app.db import get_session
 from app.models import User, ParkingLot, ParkingSpot
-from app.schemas import LotCreate, LotRead
+from app.schemas import LotCreate, LotRead, LotReadWithSpots, SpotRead
 from app.deps import get_current_user
 from app.services.geocoding import get_lat_lon
 
@@ -20,15 +19,14 @@ async def create_lot(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    # 1. Determine Lat/Lon
+    # 1. Strict Geocoding
     if payload.latitude and payload.longitude:
-        # Trust the user's pinned location
         lat, lon = payload.latitude, payload.longitude
     else:
-        # Fallback to Geocoding the string
+        # This now raises 400 if invalid, or 500 if key missing
         lat, lon = get_lat_lon(payload.address)
 
-    # 2. Create PostGIS Point (Longitude, Latitude)
+    # 2. Create Lot
     location_point = WKTElement(f"POINT({lon} {lat})", srid=4326)
 
     new_lot = ParkingLot(
@@ -37,22 +35,22 @@ async def create_lot(
         address=payload.address,
         location=location_point,
     )
-    # ... (Rest of the function remains the same: add spot, update role, commit)
     session.add(new_lot)
     await session.commit()
     await session.refresh(new_lot)
 
+    # 3. Create Default Spot
     new_spot = ParkingSpot(
         lot_id=new_lot.id, name=f"{payload.name} - Spot 1", spot_type=payload.spot_type
     )
     session.add(new_spot)
 
+    # 4. Upgrade Role
     if current_user.role == "DRIVER":
         current_user.role = "SELLER_C2B"
         session.add(current_user)
 
     await session.commit()
-
     return new_lot
 
 
@@ -74,12 +72,10 @@ async def get_lot_details(
     if not lot:
         raise HTTPException(status_code=404, detail="Lot not found")
 
-    # Fetch spots manually since we aren't using Relationship attributes yet
     statement = select(ParkingSpot).where(ParkingSpot.lot_id == lot_id)
     result = await session.execute(statement)
     spots = result.scalars().all()
 
-    # Combine into response
     return LotReadWithSpots(
         **lot.model_dump(), spots=[SpotRead(**s.model_dump()) for s in spots]
     )
