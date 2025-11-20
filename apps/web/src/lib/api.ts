@@ -46,6 +46,7 @@ export interface UserRead {
   school?: string;
   languages?: string;
   interests?: string[];
+  created_at?: string;
 }
 
 export interface Token {

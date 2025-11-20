@@ -10,6 +10,7 @@ interface User {
   email?: string;
   profile_picture_url?: string;
   default_vehicle_plate?: string;
+  created_at?: string;
 
   // New Profile Fields
   bio?: string;

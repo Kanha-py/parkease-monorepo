@@ -66,6 +66,7 @@ class UserRead(BaseModel):
     school: Optional[str] = None
     languages: Optional[str] = None
     interests: Optional[List[str]] = None
+    created_at: datetime
 
 
 class Token(BaseModel):
