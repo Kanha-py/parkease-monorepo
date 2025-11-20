@@ -14,7 +14,8 @@ import {
   PlusCircle,
   LayoutDashboard,
   LogIn,
-  UserPlus
+  UserPlus,
+  Settings
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,6 @@ export function UserMenu() {
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
 
-  // --- FIX: Define isSeller here ---
   const isSeller = user?.role === "SELLER_C2B" || user?.role === "OPERATOR_B2B";
 
   const handleAuthClick = (mode: "login" | "signup") => {
@@ -56,7 +56,6 @@ export function UserMenu() {
             <Menu className="w-5 h-5 text-slate-600" />
             <div className="bg-slate-500 rounded-full text-white p-0.5">
                {user?.profile_picture_url ? (
-                   // Placeholder for real image if you have it
                    <img src={user.profile_picture_url} alt="Profile" className="w-7 h-7 rounded-full object-cover" />
                ) : (
                    <UserCircle className="w-7 h-7 fill-current text-slate-300 bg-slate-500 rounded-full" />
@@ -88,11 +87,6 @@ export function UserMenu() {
                         icon={CalendarDays}
                         label="My Bookings"
                     />
-                    <MenuItem
-                        onClick={() => router.push("/dashboard")}
-                        icon={Car}
-                        label="My Vehicles"
-                    />
                 </div>
 
                 <MenuDivider />
@@ -101,7 +95,6 @@ export function UserMenu() {
                 <div className="px-2 py-2">
                     {isSeller ? (
                         <>
-                            {/* View for Verified Sellers */}
                             <MenuLabel>Hosting</MenuLabel>
                             <MenuItem
                                 onClick={() => router.push("/hosting")}
@@ -116,14 +109,11 @@ export function UserMenu() {
                             />
                         </>
                     ) : (
-                        <>
-                            {/* Upsell for Drivers */}
-                            <MenuItem
-                                onClick={() => router.push("/list-spot")}
-                                icon={Building2}
-                                label="Become a Seller"
-                            />
-                        </>
+                        <MenuItem
+                            onClick={() => router.push("/list-spot")}
+                            icon={Building2}
+                            label="Become a Seller"
+                        />
                     )}
                 </div>
 
@@ -131,10 +121,17 @@ export function UserMenu() {
 
                 {/* ACCOUNT SECTION */}
                 <div className="px-2 pt-2">
+                    {/* Link to the new Account Layout */}
+                    <MenuItem
+                        onClick={() => router.push("/account")}
+                        icon={Settings}
+                        label="Account"
+                    />
+                    {/* Direct Link to Public Profile */}
                     <MenuItem
                         onClick={() => router.push("/profile")}
                         icon={User}
-                        label="Account"
+                        label="View/Edit Profile"
                     />
                     <MenuItem
                         onClick={() => router.push("/help")}

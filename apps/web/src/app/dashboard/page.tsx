@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Car, MapPin, Clock } from "lucide-react";
+import { Car, Clock, Loader2 } from "lucide-react";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -33,11 +33,14 @@ export default function DashboardPage() {
     if(!vehiclePlate) return;
     setIsAddingVehicle(true);
     try {
+        // FIXED: password is required by the API schema, sending empty string to bypass hash update
         const updatedUser = await updateUserProfile({
             name: user!.name,
             email: user!.email || "",
+            password: "",
             default_vehicle_plate: vehiclePlate
         });
+
         const token = useAuthStore.getState().token;
         if(token) setAuth(token, updatedUser);
         toast.success("Vehicle added!");
@@ -86,7 +89,7 @@ export default function DashboardPage() {
                                     onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
                                 />
                                 <Button onClick={handleSaveVehicle} disabled={isAddingVehicle}>
-                                    {isAddingVehicle ? "Saving..." : "Save"}
+                                    {isAddingVehicle ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
                                 </Button>
                             </div>
                         </div>

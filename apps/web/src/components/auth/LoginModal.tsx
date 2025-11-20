@@ -1,22 +1,22 @@
+// apps/web/src/components/auth/LoginModal.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"; // Removed DialogHeader import as we built a custom one
+import Link from "next/link"; // Added for Terms links
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/useAuthStore";
 import { api, loginWithPassword, requestLoginOtp, updateUserProfile } from "@/lib/api";
 import { toast } from "sonner";
-import axios from "axios";
 import {
   Smartphone,
   Mail,
   ChevronLeft,
   Loader2,
   Check,
-  X,
   Eye,
   EyeOff,
   ShieldCheck
@@ -56,6 +56,9 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
 
+  // Legal Compliance State
+  const [agreedToTerms, setAgreedToTerms] = useState(false); // NEW
+
   const [isNewUser, setIsNewUser] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -76,6 +79,7 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
             setName("");
             setEmail("");
             setPassword("");
+            setAgreedToTerms(false); // Reset
             setLoading(false);
             requestLock.current = false;
         }, 300);
@@ -184,6 +188,11 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
 
   // --- 4. Final Profile ---
   const handleFinalSignup = async () => {
+    if (!agreedToTerms) {
+        toast.error("You must agree to the terms to continue.");
+        return;
+    }
+
     setLoading(true);
     try {
         await updateUserProfile({ name, email, password });
@@ -219,7 +228,6 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
     <Dialog open={show} onOpenChange={setShow}>
       <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden rounded-2xl gap-0 bg-white text-slate-900 shadow-2xl border-slate-100">
 
-        {/* FIX: Hidden DialogTitle for Accessibility */}
         <DialogTitle className="sr-only">
             {step === "WELCOME" ? "Log in or Sign up" : "Authentication"}
         </DialogTitle>
@@ -284,10 +292,6 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                         <Mail className="w-5 h-5 mr-2 text-slate-500" />
                         Continue with Email
                     </Button>
-
-                    <p className="text-[10px] text-center text-slate-400 leading-tight px-4">
-                        By continuing, you agree to our Terms of Service and Privacy Policy.
-                    </p>
                 </div>
             )}
 
@@ -307,6 +311,7 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                     <div className="flex justify-between gap-2">
                         {otpValues.map((digit, index) => (
                             <Input
+                                autoFocus={index === 0}
                                 key={index}
                                 ref={(el) => { otpRefs.current[index] = el }}
                                 type="text"
@@ -328,10 +333,6 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                     >
                         {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Verify & Continue"}
                     </Button>
-
-                    <button className="w-full text-center text-sm font-semibold text-slate-500 hover:text-slate-900" onClick={handlePhoneSubmit}>
-                        Didn't receive code? <span className="underline">Resend</span>
-                    </button>
                 </div>
             )}
 
@@ -382,6 +383,7 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                         </button>
                     </div>
 
+                    {/* Password Requirements */}
                     <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Requirements</p>
                         {passChecks.map((check, i) => (
@@ -394,10 +396,24 @@ export function LoginModal({ isOpen, onOpenChange }: LoginModalProps) {
                         ))}
                     </div>
 
+                    {/* Legal Compliance Checkbox */}
+                    <div className="flex items-start space-x-3 px-1 pt-2">
+                        <input
+                            type="checkbox"
+                            id="terms"
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            checked={agreedToTerms}
+                            onChange={(e) => setAgreedToTerms(e.target.checked)}
+                        />
+                        <label htmlFor="terms" className="text-sm text-slate-500 leading-tight">
+                            I agree to the <Link href="/terms" className="text-blue-600 underline hover:text-blue-800">Terms of Service</Link> and <Link href="/privacy" className="text-blue-600 underline hover:text-blue-800">Privacy Policy</Link>.
+                        </label>
+                    </div>
+
                     <Button
                         className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg shadow-green-600/20"
                         onClick={handleFinalSignup}
-                        disabled={loading || !isPasswordValid}
+                        disabled={loading || !isPasswordValid || !agreedToTerms}
                     >
                          {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : "Create Account"}
                     </Button>

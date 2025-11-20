@@ -2,51 +2,92 @@
 from typing import Optional, List, Any
 from datetime import datetime
 from geoalchemy2 import Geography
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, text, JSON, BigInteger
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, text, JSON, BigInteger, String
+from sqlalchemy.dialects import postgresql
 import uuid
 
-
+# --- 1. Extended User Model ---
 class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     phone: str = Field(index=True, unique=True, max_length=15)
     email: Optional[str] = Field(default=None, unique=True, max_length=255)
     password_hash: Optional[str] = Field(default=None)
     name: str = Field(max_length=100)
-    role: str = Field(
-        default="DRIVER", max_length=20
-    )  # DRIVER, SELLER_C2B, OPERATOR_B2B
+    role: str = Field(default="DRIVER", max_length=20)
     profile_picture_url: Optional[str] = Field(default=None)
     default_vehicle_plate: Optional[str] = Field(default=None, max_length=20)
     is_blocked: bool = Field(default=False)
+
+    # New Profile Fields (Airbnb Style)
+    bio: Optional[str] = Field(default=None)
+    work: Optional[str] = Field(default=None)
+    location: Optional[str] = Field(default=None)
+    school: Optional[str] = Field(default=None)
+    languages: Optional[str] = Field(default=None)
+
+    # Postgres Array for Tags
+    interests: Optional[List[str]] = Field(default=None, sa_column=Column(postgresql.ARRAY(String)))
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+    # Relationships
+    preferences: Optional["UserPreferences"] = Relationship(sa_relationship_kwargs={"uselist": False}, back_populates="user")
+    notification_settings: Optional["NotificationSettings"] = Relationship(sa_relationship_kwargs={"uselist": False}, back_populates="user")
+
+
+# --- 2. New Account Settings Models ---
+
+class UserPreferences(SQLModel, table=True):
+    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
+    currency: str = Field(default="INR")
+    language: str = Field(default="en")
+    timezone: str = Field(default="Asia/Kolkaata")
+
+    user: User = Relationship(back_populates="preferences")
+
+
+class NotificationSettings(SQLModel, table=True):
+    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
+    email_messages: bool = Field(default=True)
+    sms_messages: bool = Field(default=True)
+    push_reminders: bool = Field(default=True)
+    email_promotions: bool = Field(default=False)
+
+    user: User = Relationship(back_populates="notification_settings")
+
+
+class UserSession(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id")
+    device_name: str # e.g., "Chrome on Windows"
+    ip_address: str
+    location: Optional[str] = None # e.g., "Mumbai, MH"
+    last_active: datetime = Field(default_factory=datetime.utcnow)
+    is_current: bool = Field(default=False)
+
+
+# --- Existing Models (Unchanged) ---
 
 class PayoutAccount(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="user.id")
-    account_type: str  # 'upi', 'bank_account'
-    account_details_encrypted: str  # We will store raw JSON for MVP simplicity, encrypted in Prod
+    account_type: str
+    account_details_encrypted: str
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-
-# 1. LotAmenity Class
 class LotAmenity(SQLModel, table=True):
     lot_id: uuid.UUID = Field(foreign_key="parkinglot.id", primary_key=True)
     amenity_id: uuid.UUID = Field(foreign_key="amenity.id", primary_key=True)
 
-
-# 2. Amenity Class
 class Amenity(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, index=True)
     icon_svg: Optional[str] = Field(default=None)
 
-
-# 3. ParkingLot Class (Should NOT have lot_id or amenity_id)
 class ParkingLot(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_user_id: uuid.UUID = Field(foreign_key="user.id")
@@ -57,77 +98,51 @@ class ParkingLot(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-
-# 4. ParkingSpot Class
 class ParkingSpot(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     lot_id: uuid.UUID = Field(foreign_key="parkinglot.id")
     name: str = Field(max_length=50)
     spot_type: str = Field(max_length=20)
 
-
 class SpotAvailability(SQLModel, table=True):
-    # Use BigInteger for ID as this table grows very fast
     id: Optional[int] = Field(
         default=None, sa_column=Column(BigInteger, primary_key=True, autoincrement=True)
     )
     spot_id: uuid.UUID = Field(foreign_key="parkingspot.id", index=True)
-
     start_time: datetime = Field(index=True)
     end_time: datetime = Field(index=True)
-
-    status: str = Field(default="AVAILABLE", max_length=20)  # 'AVAILABLE', 'BOOKED'
-    booking_id: Optional[uuid.UUID] = Field(default=None)  # Link to Booking later
-
+    status: str = Field(default="AVAILABLE", max_length=20)
+    booking_id: Optional[uuid.UUID] = Field(default=None)
 
 class PricingRule(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     lot_id: uuid.UUID = Field(foreign_key="parkinglot.id", index=True)
-
-    name: str = Field(max_length=50)  # e.g. "Standard Hourly"
+    name: str = Field(max_length=50)
     rate: float = Field(default=0.0)
-    rate_type: str = Field(default="HOURLY", max_length=20)  # 'HOURLY', 'FLAT'
-
+    rate_type: str = Field(default="HOURLY", max_length=20)
     is_active: bool = Field(default=True)
-    priority: int = Field(default=0)  # 0=Base, 10=Event (Higher overrides lower)
-
-
-# --- Booking & Payment ---
-
+    priority: int = Field(default=0)
 
 class Booking(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-
     driver_user_id: uuid.UUID = Field(foreign_key="user.id")
     lot_id: uuid.UUID = Field(foreign_key="parkinglot.id")
     spot_id: uuid.UUID = Field(foreign_key="parkingspot.id")
-
     start_time: datetime = Field(index=True)
     end_time: datetime = Field(index=True)
-
-    # Status: 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'
     status: str = Field(default="PENDING", max_length=20)
-
-    # QR Code (Generated after payment)
     qr_code_data: Optional[str] = Field(default=None, unique=True)
     vehicle_plate: Optional[str] = Field(default=None)
-
     created_at: datetime = Field(default_factory=datetime.utcnow)
-
 
 class Payment(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     booking_id: uuid.UUID = Field(foreign_key="booking.id")
-
     razorpay_order_id: str = Field(index=True)
     razorpay_payment_id: Optional[str] = Field(default=None)
-
     amount_charged: float
-    commission_fee: float  # Our cut
-    seller_payout_amount: float  # Seller's share
-
-    # Status: 'PENDING', 'PAID_BY_DRIVER', 'PAYOUT_TO_SELLER_COMPLETE'
+    commission_fee: float
+    seller_payout_amount: float
     status: str = Field(default="PENDING", max_length=50)
-
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

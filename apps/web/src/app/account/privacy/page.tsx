@@ -31,8 +31,7 @@ export default function PrivacyPage() {
             </div>
 
             <h1 className="text-3xl font-bold text-slate-900">Privacy & sharing</h1>
-            <p className="text-slate-500 mt-1 -mb-4">Manage your data and how you share with others.</p>
-
+            <p className="text-slate-500 mt-1">Manage your data and how you share with others.</p>
             <div className="space-y-8">
                 <section>
                     <h3 className="text-lg font-semibold text-slate-900 mb-4 border-b border-slate-200 pb-2">Visibility</h3>

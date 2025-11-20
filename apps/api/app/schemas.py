@@ -1,8 +1,7 @@
 # apps/api/app/schemas.py
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import uuid
-from typing import List
 from datetime import datetime
 
 
@@ -31,11 +30,24 @@ class UserProfileUpdate(BaseModel):
     email: str
     password: str
     default_vehicle_plate: Optional[str] = None
+    bio: Optional[str] = None
+    work: Optional[str] = None
+    location: Optional[str] = None
+    school: Optional[str] = None
+    languages: Optional[str] = None
+    interests: Optional[List[str]] = None
 
 
-class LoginRequest(BaseModel):
-    email: str
-    password: str
+class PreferencesUpdate(BaseModel):
+    currency: str
+    language: str
+
+
+class NotificationsUpdate(BaseModel):
+    email_messages: bool
+    sms_messages: bool
+    push_reminders: bool
+    email_promotions: bool
 
 
 # --- Response Schemas ---
@@ -46,6 +58,13 @@ class UserRead(BaseModel):
     role: str
     email: Optional[str] = None
     default_vehicle_plate: Optional[str] = None
+    profile_picture_url: Optional[str] = None
+    bio: Optional[str] = None
+    work: Optional[str] = None
+    location: Optional[str] = None
+    school: Optional[str] = None
+    languages: Optional[str] = None
+    interests: Optional[List[str]] = None
 
 
 class Token(BaseModel):
@@ -54,12 +73,40 @@ class Token(BaseModel):
     user: UserRead
 
 
+class PreferencesRead(BaseModel):
+    currency: str
+    language: str
+    timezone: str
+
+
+class NotificationsRead(BaseModel):
+    email_messages: bool
+    sms_messages: bool
+    push_reminders: bool
+    email_promotions: bool
+
+
+class SessionRead(BaseModel):
+    id: uuid.UUID
+    device_name: str
+    location: Optional[str]
+    last_active: datetime
+    is_current: bool
+
+
+# --- Core Domain Schemas ---
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class LotCreate(BaseModel):
     name: str
     address: str
     spot_type: str = "CAR"
     amenities: List[str] = []
-    # New fields (Optional overrides)
     latitude: float | None = None
     longitude: float | None = None
 
@@ -71,39 +118,7 @@ class LotRead(BaseModel):
     created_at: datetime
 
 
-class AvailabilityCreate(BaseModel):
-    spot_id: uuid.UUID
-    start_time: datetime
-    end_time: datetime
-
-
-class PricingCreate(BaseModel):
-    lot_id: uuid.UUID
-    rate: float
-    rate_type: str = "HOURLY"
-    # New fields for B2B
-    name: str = "Standard Rate"
-    priority: int = 0
-
-
-# Response models
-class AvailabilityRead(BaseModel):
-    id: int
-    start_time: datetime
-    end_time: datetime
-    status: str
-
-
-class PricingRead(BaseModel):
-    id: uuid.UUID
-    rate: float
-    rate_type: str
-    # New fields
-    name: str
-    priority: int
-    is_active: bool
-
-
+# --- RESTORED MISSING SCHEMAS ---
 class SpotRead(BaseModel):
     id: uuid.UUID
     name: str
@@ -114,15 +129,20 @@ class LotReadWithSpots(LotRead):
     spots: List[SpotRead]
 
 
-# --- Search Schemas ---
+class LotDetails(LotRead):  # Keep this alias if other files use it
+    spots: List[SpotRead]
+
+
+# --------------------------------
+
+
 class SearchResult(BaseModel):
     lot_id: uuid.UUID
     name: str
     address: str
-    # We return lat/lon as simple floats for the frontend map
     latitude: float
     longitude: float
-    price: float  # The calculated total price
+    price: float
     rate_type: str
 
     class Config:
@@ -145,11 +165,41 @@ class BookingResponse(BaseModel):
 
 
 class PayoutAccountCreate(BaseModel):
-    account_type: str = "upi"  # or 'bank'
-    details: dict  # e.g., {"upi_id": "rohan@okaxis"}
+    account_type: str = "upi"
+    details: dict
 
 
 class PayoutAccountRead(BaseModel):
     id: uuid.UUID
     account_type: str
     is_active: bool
+
+
+class PricingCreate(BaseModel):
+    lot_id: uuid.UUID
+    rate: float
+    rate_type: str = "HOURLY"
+    name: str = "Standard Rate"
+    priority: int = 0
+
+
+class PricingRead(BaseModel):
+    id: uuid.UUID
+    rate: float
+    rate_type: str
+    name: str
+    priority: int
+    is_active: bool
+
+
+class AvailabilityCreate(BaseModel):
+    spot_id: uuid.UUID
+    start_time: datetime
+    end_time: datetime
+
+
+class AvailabilityRead(BaseModel):
+    id: int
+    start_time: datetime
+    end_time: datetime
+    status: str
