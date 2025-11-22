@@ -212,3 +212,17 @@ class AvailabilityRead(BaseModel):
     start_time: datetime
     end_time: datetime
     status: str
+
+
+class ReviewCreate(BaseModel):
+    booking_id: uuid.UUID
+    rating: int
+    comment: Optional[str] = None
+
+
+class ReviewRead(BaseModel):
+    id: uuid.UUID
+    reviewer_name: str
+    rating: int
+    comment: Optional[str]
+    created_at: datetime

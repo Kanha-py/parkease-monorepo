@@ -169,3 +169,15 @@ class Payment(SQLModel, table=True):
     status: str = Field(default="PENDING", max_length=50)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Review(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    booking_id: uuid.UUID = Field(
+        foreign_key="booking.id", unique=True
+    )  # One review per booking
+    reviewer_id: uuid.UUID = Field(foreign_key="user.id")
+    lot_id: uuid.UUID = Field(foreign_key="parkinglot.id")
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)

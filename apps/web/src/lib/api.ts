@@ -131,6 +131,14 @@ export interface LotDetails {
   spots: Spot[];
 }
 
+export interface Review {
+  id: string;
+  reviewer_name: string;
+  rating: number;
+  comment?: string;
+  created_at: string;
+}
+
 // --- Auth Calls ---
 
 export const loginWithPassword = async (data: {
@@ -288,6 +296,20 @@ export const createPricingRule = async (lotId: string, data: any) => {
 
 export const deletePricingRule = async (ruleId: string) => {
   const response = await api.delete(`/api/b2b/rules/${ruleId}`);
+  return response.data;
+};
+
+export const createReview = async (data: {
+  booking_id: string;
+  rating: number;
+  comment: string;
+}) => {
+  const response = await api.post("/api/reviews/", data);
+  return response.data;
+};
+
+export const getReviews = async (lotId: string) => {
+  const response = await api.get<Review[]>(`/api/reviews/lots/${lotId}`);
   return response.data;
 };
 
